@@ -176,8 +176,9 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
 
  <!-- ===================== CONDUCTORES ===================== -->
  <div id=viewCond class=hide>
+  <div class="grid kpis" id=condCounts></div>
   <div class=card>
-   <h2>Padron de conductores y bajas</h2>
+   <h2>Conductores activos</h2>
    <div class="row perm-rh" style="margin-bottom:10px">
     <select id=dEmpresa></select>
     <input id=dNombre placeholder="Nombre del conductor" style="min-width:200px">
@@ -186,9 +187,16 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    </div>
    <div class=scroll>
     <table id=tblCond><thead><tr>
-     <th>Conductor</th><th>Telefono</th><th>Empresa</th><th>Estatus</th>
-     <th>Motivo baja</th><th>Acciones</th></tr></thead>
+     <th>Conductor</th><th>Telefono</th><th>Empresa</th><th>Acciones</th></tr></thead>
      <tbody id=condBody></tbody></table>
+   </div>
+  </div>
+  <div class=card>
+   <h2>Historico de bajas</h2>
+   <div class=scroll>
+    <table id=tblBajas><thead><tr>
+     <th>Conductor</th><th>Empresa</th><th>Motivo de baja</th><th>Fecha baja</th><th>Acciones</th></tr></thead>
+     <tbody id=bajasBody></tbody></table>
    </div>
   </div>
  </div>
@@ -324,6 +332,14 @@ async function candStatus(id, sel){
  }
  await fetch('/api/candidatos/status',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({id:id,status:status,motivo_rechazo:motivo})});
+ if(status==='Contratado'){
+  var cc=(window._CANDS||[]).find(function(x){return x.id==id;});
+  if(cc && confirm('El candidato '+cc.nombre+' paso a Contratado. Agregarlo a conductores activos de '+cc.empresa+'?')){
+   var rr=await fetch('/api/conductores/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({empresa:cc.empresa, nombre:cc.nombre, telefono:cc.telefono||''})});
+   var jj=await rr.json();
+   if(jj&&jj.ok){ alert(cc.nombre+' agregado a conductores activos.'); } else { alert((jj&&jj.error)||'No se pudo agregar (quiza ya existe).'); }
+  }
+ }
  cargarCand();
 }
 window.candNota=function(id){
@@ -348,15 +364,32 @@ async function cargarCond(){
  var q=emp()?('?empresa='+encodeURIComponent(emp())):'';
  var arr=await (await fetch('/api/conductores'+q,{cache:'no-store'})).json();
  var rh=(ME.rol==='RH'||_niv(ME.rol)>=3), admin=_niv(ME.rol)>=3;
- document.getElementById('condBody').innerHTML = arr.map(function(c){
-  var est=c.activo?'<span class=pill style="background:#16a34a">Activo</span>':'<span class=pill style="background:#dc2626">Baja</span>';
+ var activos=(arr||[]).filter(function(c){return c.activo;});
+ var bajas=(arr||[]).filter(function(c){return !c.activo;});
+ document.getElementById('condBody').innerHTML = activos.map(function(c){
   var acc='';
-  if(rh&&c.activo) acc='<button class="b r" style="padding:4px 8px" onclick="condBaja('+c.id+')">Dar de baja</button>';
-  if(rh&&!c.activo) acc='<button class="b s" style="padding:4px 8px" onclick="condReact('+c.id+')">Reactivar</button>';
+  if(rh) acc='<button class="b r" style="padding:4px 8px" onclick="condBaja('+c.id+')">Dar de baja</button>';
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="condDel('+c.id+')">&#10005;</button>';
-  return '<tr><td><b>'+_esc(c.nombre)+'</b></td><td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td>'
-   +'<td>'+est+'</td><td>'+_esc(c.motivo_baja||'')+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
- }).join('') || '<tr><td colspan=6 class=muted>Sin conductores aun.</td></tr>';
+  return '<tr><td><b>'+_esc(c.nombre)+'</b></td><td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
+ }).join('') || '<tr><td colspan=4 class=muted>Sin conductores activos.</td></tr>';
+ document.getElementById('bajasBody').innerHTML = bajas.map(function(c){
+  var acc='';
+  if(rh) acc='<button class="b s" style="padding:4px 8px" onclick="condReact('+c.id+')">Reactivar</button>';
+  if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="condDel('+c.id+')">&#10005;</button>';
+  var fb=(c.fecha_baja||'').slice(0,10);
+  return '<tr><td>'+_esc(c.nombre)+'</td><td>'+_esc(c.empresa)+'</td><td>'+_esc(c.motivo_baja||'')+'</td><td>'+_esc(fb)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
+ }).join('') || '<tr><td colspan=5 class=muted>Sin bajas registradas.</td></tr>';
+ try{
+  var all=await (await fetch('/api/conductores',{cache:'no-store'})).json();
+  var allAct=(all||[]).filter(function(c){return c.activo;});
+  var total=allAct.length;
+  var nC=allAct.filter(function(c){return c.empresa==='Cryogenics';}).length;
+  var nT=allAct.filter(function(c){return c.empresa==='TNIR';}).length;
+  function pct(n){return total? Math.round(n/total*100):0;}
+  document.getElementById('condCounts').innerHTML =
+    '<div class=kpi><div class=v style="color:#0891b2">'+nC+' <span style="font-size:15px;color:#64748b">('+pct(nC)+'%)</span></div><div class=l>Activos Cryogenics</div></div>'
+   +'<div class=kpi><div class=v style="color:#2563eb">'+nT+' <span style="font-size:15px;color:#64748b">('+pct(nT)+'%)</span></div><div class=l>Activos TNIR</div></div>';
+ }catch(e){}
 }
 async function condBaja(id){
  var motivo=prompt('Motivo de baja:\\n'+CAT.motivos_baja.map(function(m,i){return (i+1)+') '+m;}).join('\\n')+'\\n\\nEscribe el numero o el texto:');
@@ -570,8 +603,10 @@ class Handler(BaseHTTPRequestHandler):
             emp = data.get("empresa")
             if emp not in db.EMPRESAS:
                 return self._json({"ok": False, "error": "empresa invalida"})
-            db.conductor_add(emp, str(data.get("nombre", "")).strip(),
+            _cid = db.conductor_add(emp, str(data.get("nombre", "")).strip(),
                              str(data.get("telefono", "")).strip())
+            if _cid is None:
+                return self._json({"ok": False, "error": "ese conductor ya esta en la lista de activos"})
             return self._json({"ok": True})
         if path == "/api/conductores/baja":
             if not rh():
