@@ -284,6 +284,11 @@ def conductores_list(empresa=None, solo_activos=None):
 
 
 def conductor_add(empresa, nombre, telefono=""):
+    existe = _run(f"SELECT 1 FROM recl_conductores WHERE empresa = {PH} "
+                  f"AND LOWER(nombre) = LOWER({PH}) AND activo = 1",
+                  (empresa, nombre), "one")
+    if existe:
+        return None
     cid = _nuevo_id()
     _run(f"INSERT INTO recl_conductores(id, empresa, nombre, telefono, activo, "
          f"fecha_alta, fecha_baja, motivo_baja) "
