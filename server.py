@@ -137,8 +137,9 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
 <header>
  <h1>&#128203; Tablero de Reclutamiento</h1>
  <div class=tabs>
-  <button id=tabFlujo class=on onclick="showTab('flujo')">Flujo</button>
-  <button id=tabDash onclick="showTab('dash')">Dashboard / KPIs</button>
+  <button id=tabFlujo class=on onclick="showTab('flujo')">Pipeline reclutamiento</button>
+  <button id=tabCond onclick="showTab('cond')">Conductores activos</button>
+  <button id=tabDash onclick="showTab('dash')">Dashboard KPI</button>
  </div>
  <span class=sp></span>
  <select id=fEmpresa onchange="recargar()"><option value="">Todas las empresas</option></select>
@@ -167,10 +168,14 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    <div class=scroll>
     <table id=tblCand><thead><tr>
      <th>Candidato</th><th>Telefono</th><th>Empresa</th><th>Origen</th>
-     <th>Status</th><th>Dias</th><th>Acciones</th></tr></thead>
+     <th>Status</th><th>Dias</th><th>Dias a contratacion</th><th>Acciones</th></tr></thead>
      <tbody id=candBody></tbody></table>
    </div>
   </div>
+ </div>
+
+ <!-- ===================== CONDUCTORES ===================== -->
+ <div id=viewCond class=hide>
   <div class=card>
    <h2>Padron de conductores y bajas</h2>
    <div class="row perm-rh" style="margin-bottom:10px">
@@ -244,10 +249,13 @@ function permisos(){
 }
 function showTab(w){
  document.getElementById('viewFlujo').classList.toggle('hide', w!=='flujo');
+ document.getElementById('viewCond').classList.toggle('hide', w!=='cond');
  document.getElementById('viewDash').classList.toggle('hide', w!=='dash');
  document.getElementById('tabFlujo').classList.toggle('on', w==='flujo');
+ document.getElementById('tabCond').classList.toggle('on', w==='cond');
  document.getElementById('tabDash').classList.toggle('on', w==='dash');
  if(w==='dash') cargarDash();
+ if(w==='cond') cargarCond();
 }
 function emp(){ return document.getElementById('fEmpresa').value; }
 async function recargar(){ await cargarPlantilla(); await cargarCand(); await cargarCond();
@@ -291,6 +299,7 @@ async function cargarCand(){
  document.getElementById('candBody').innerHTML = arr.map(function(c){
   var col=STATUS_COLOR[c.status]||'#64748b';
   var dias=_dias(c.creado, (c.status==='Contratado'&&c.fecha_contratado)?c.fecha_contratado:null);
+  var diasContr=(c.fecha_contratado)?_dias(c.creado, c.fecha_contratado):null;
   var pill='<span class=pill style="background:'+col+'">'+_esc(c.status)+'</span>';
   if(c.status==='Rechazado'&&c.motivo_rechazo) pill+=' <span class=muted style="font-size:11px">'+_esc(c.motivo_rechazo)+'</span>';
   var acc='';
@@ -301,8 +310,8 @@ async function cargarCand(){
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="candDel('+c.id+')">&#10005;</button>';
   return '<tr><td><b>'+_esc(c.nombre)+'</b>'+(c.notas?'<div class=muted style="font-size:11px">'+_esc(c.notas)+'</div>':'')+'</td>'
    +'<td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td>'+_esc(c.origen||'')+'</td>'
-   +'<td>'+pill+'</td><td>'+(dias==null?'-':dias)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
- }).join('') || '<tr><td colspan=7 class=muted>Sin candidatos aun.</td></tr>';
+   +'<td>'+pill+'</td><td>'+(dias==null?'-':dias)+'</td><td>'+(diasContr==null?'—':diasContr)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
+ }).join('') || '<tr><td colspan=8 class=muted>Sin candidatos aun.</td></tr>';
 }
 async function candStatus(id, sel){
  var status=sel.value, motivo=null;
