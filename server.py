@@ -295,6 +295,7 @@ async function candAdd(){
 async function cargarCand(){
  var q=emp()?('?empresa='+encodeURIComponent(emp())):'';
  var arr=await (await fetch('/api/candidatos'+q,{cache:'no-store'})).json();
+ window._CANDS=arr;
  var puede=(ME.rol==='Reclutador'||_niv(ME.rol)>=3), admin=_niv(ME.rol)>=3;
  document.getElementById('candBody').innerHTML = arr.map(function(c){
   var col=STATUS_COLOR[c.status]||'#64748b';
@@ -307,6 +308,7 @@ async function cargarCand(){
    acc='<select onchange="candStatus('+c.id+',this)" style="font-size:12px">'
      +CAT.statuses.map(function(s){return '<option'+(s===c.status?' selected':'')+'>'+_esc(s)+'</option>';}).join('')+'</select>';
   }
+  if(puede) acc+=' <button class="b s" style="padding:4px 8px" onclick="candNota('+c.id+')" title="Editar observacion">&#9998;</button>';
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="candDel('+c.id+')">&#10005;</button>';
   return '<tr><td><b>'+_esc(c.nombre)+'</b>'+(c.notas?'<div class=muted style="font-size:11px">'+_esc(c.notas)+'</div>':'')+'</td>'
    +'<td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td>'+_esc(c.origen||'')+'</td>'
@@ -324,6 +326,13 @@ async function candStatus(id, sel){
    body:JSON.stringify({id:id,status:status,motivo_rechazo:motivo})});
  cargarCand();
 }
+window.candNota=function(id){
+ var c=(window._CANDS||[]).find(function(x){return x.id==id;});
+ var actual=c?(c.notas||''):'';
+ var nota=prompt('Ultima observacion del candidato:', actual);
+ if(nota===null) return;
+ fetch('/api/candidatos/editar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id, notas:nota})}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok===false){alert(j.error||'No se pudo (requiere rol Reclutador).');} cargarCand(); });
+};
 async function candDel(id){ if(!confirm('Eliminar candidato?'))return;
  await fetch('/api/candidatos/del',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); cargarCand(); }
 async function condAdd(){
