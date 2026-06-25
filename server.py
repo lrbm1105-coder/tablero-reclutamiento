@@ -378,7 +378,7 @@ async function cargarDash(){
  document.getElementById('kpiCards').innerHTML = cards.map(function(c){
   return '<div class=kpi><div class=v style="color:'+c[2]+'">'+_esc(c[1])+'</div><div class=l>'+_esc(c[0])+'</div></div>';
  }).join('');
- barChart('chEmbudo', s.embudo.map(function(x){return x.status;}), s.embudo.map(function(x){return x.n;}), '#2563eb');
+ barChart('chEmbudo', s.embudo.map(function(x){return x.status;}).concat(['Rechazado']), s.embudo.map(function(x){return x.n;}).concat([s.rechazados]), s.embudo.map(function(){return '#2563eb';}).concat(['#dc2626']));
  dough('chOrigen', s.origenes);
  dough('chRech', s.rechazos_motivos);
  barChart('chBaja', Object.keys(s.bajas_motivos), Object.values(s.bajas_motivos), '#dc2626');
