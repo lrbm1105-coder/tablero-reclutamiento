@@ -147,7 +147,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
  <span class=ub><a onclick="abrirUsuarios()" class="perm-admin">Usuarios</a><a onclick="salir()">Salir</a></span>
 </header>
 <main>
- <div id=viewFlujo>
+ <div id=viewFlujo><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button></div>
   <div class=card>
    <h2>Necesidad de reclutamiento por empresa</h2>
    <div class="grid nec" id=necCards></div>
@@ -201,7 +201,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    </div>
   </div>
  </div>
- <div id=viewDash class=hide>
+ <div id=viewDash class=hide><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button></div>
   <div class="grid kpis" id=kpiCards></div>
   <div class=two>
    <div class=card><h2>Embudo de reclutamiento</h2><div class=chartbox><canvas id=chEmbudo></canvas></div></div>
@@ -320,8 +320,11 @@ async function sortCand(k){
  var el=document.querySelector('#tblCand thead th[data-k="'+k+'"] .ar');
  if(el) el.textContent = s.dir>0?" \u25B2":" \u25BC";
 }
+window._PERIODO='';
+function _qs(){ var p=[]; var e=emp(); if(e) p.push('empresa='+encodeURIComponent(e)); if(window._PERIODO) p.push('dias='+window._PERIODO); return p.length?('?'+p.join('&')):''; }
+function setPeriodo(d){ window._PERIODO=(d||'')+''; var key=(d||'')+''; document.querySelectorAll('.perBtn').forEach(function(b){ var on=(b.getAttribute('data-d')===key); b.style.background=on?'#2563eb':''; b.style.color=on?'#fff':''; }); cargarCand(); if(!document.getElementById('viewDash').classList.contains('hide')) cargarDash(); }
 async function cargarCand(){
- var q=emp()?('?empresa='+encodeURIComponent(emp())):'';
+ var q=_qs();
  var arr=await (await fetch('/api/candidatos'+q,{cache:'no-store'})).json();
  window._CANDS=arr;
  if(window._CANDSORT && window._CANDSORT.key){ var _s=window._CANDSORT;
@@ -390,7 +393,7 @@ function filtrarCond(){
  rows.forEach(function(tr){ var t=(tr.textContent||"").toLowerCase(); tr.style.display=(!q||t.indexOf(q)>=0)?"":"none"; });
 }
 async function cargarCond(){
- var q=emp()?('?empresa='+encodeURIComponent(emp())):'';
+ var q=_qs();
  var arr=await (await fetch('/api/conductores'+q,{cache:'no-store'})).json();
  var rh=(ME.rol==='RH'||_niv(ME.rol)>=3), admin=_niv(ME.rol)>=3;
  var activos=(arr||[]).filter(function(c){return c.activo;});
@@ -432,7 +435,7 @@ async function condReact(id){ await fetch('/api/conductores/reactivar',{method:'
 async function condDel(id){ if(!confirm('Eliminar conductor del padron?'))return;
  await fetch('/api/conductores/del',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); cargarCond(); }
 async function cargarDash(){
- var q=emp()?('?empresa='+encodeURIComponent(emp())):'';
+ var q=_qs();
  var s=await (await fetch('/api/stats'+q,{cache:'no-store'})).json();
  var tc=(s.tiempo_conversion_dias==null?'-':s.tiempo_conversion_dias+' d');
  var bp=s.baja_principal?(s.baja_principal.motivo+' ('+s.baja_principal.n+')'):'-';
@@ -570,11 +573,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/plantilla":
             return self._json(db.plantilla_list())
         if path == "/api/candidatos":
-            return self._json(db.candidatos_list(qs.get("empresa")))
+            return self._json(db.candidatos_list(qs.get("empresa"), qs.get("dias")))
         if path == "/api/conductores":
             return self._json(db.conductores_list(qs.get("empresa")))
         if path == "/api/stats":
-            return self._json(db.stats(qs.get("empresa")))
+            return self._json(db.stats(qs.get("empresa"), qs.get("dias")))
         if path == "/api/usuarios":
             if not _puede(u["rol"], "Administrador"):
                 return self._json({"error": "solo admin"}, 403)
