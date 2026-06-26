@@ -185,6 +185,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
     <input id=dTel placeholder="Telefono">
     <button class="b g" onclick="condAdd()">Dar de alta conductor</button>
    </div>
+   <input id=condFilter type=search oninput="filtrarCond()" placeholder="Buscar operador por nombre, telefono o empresa..." style="margin-bottom:10px;width:100%;max-width:420px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px">
    <div class=scroll>
     <table id=tblCond><thead><tr>
      <th>Conductor</th><th>Telefono</th><th>Empresa</th><th>Acciones</th></tr></thead>
@@ -360,6 +361,12 @@ async function condAdd(){
  document.getElementById('dNombre').value='';document.getElementById('dTel').value='';
  cargarCond();
 }
+function filtrarCond(){
+ var f=document.getElementById("condFilter"); if(!f) return;
+ var q=(f.value||"").toLowerCase().trim();
+ var rows=document.querySelectorAll("#condBody tr");
+ rows.forEach(function(tr){ var t=(tr.textContent||"").toLowerCase(); tr.style.display=(!q||t.indexOf(q)>=0)?"":"none"; });
+}
 async function cargarCond(){
  var q=emp()?('?empresa='+encodeURIComponent(emp())):'';
  var arr=await (await fetch('/api/conductores'+q,{cache:'no-store'})).json();
@@ -372,6 +379,7 @@ async function cargarCond(){
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="condDel('+c.id+')">&#10005;</button>';
   return '<tr><td><b>'+_esc(c.nombre)+'</b></td><td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
  }).join('') || '<tr><td colspan=4 class=muted>Sin conductores activos.</td></tr>';
+ filtrarCond();
  document.getElementById('bajasBody').innerHTML = bajas.map(function(c){
   var acc='';
   if(rh) acc='<button class="b s" style="padding:4px 8px" onclick="condReact('+c.id+')">Reactivar</button>';
