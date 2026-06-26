@@ -199,14 +199,22 @@ COLS_CAND = ["id", "empresa", "nombre", "telefono", "origen", "status",
              "fecha_contratado", "fecha_rechazo", "notas"]
 
 
-def candidatos_list(empresa=None):
+def candidatos_list(empresa=None, dias=None):
     if empresa and empresa in EMPRESAS:
         rows = _run(f"SELECT {', '.join(COLS_CAND)} FROM recl_candidatos "
                     f"WHERE empresa = {PH} ORDER BY creado DESC", (empresa,), "all")
     else:
         rows = _run(f"SELECT {', '.join(COLS_CAND)} FROM recl_candidatos "
                     f"ORDER BY creado DESC", fetch="all")
-    return _dicts(rows, COLS_CAND)
+    data = _dicts(rows, COLS_CAND)
+    if dias:
+        try:
+            from datetime import timedelta
+            _corte = (datetime.now() - timedelta(days=int(dias))).strftime("%Y-%m-%dT%H:%M:%S")
+            data = [c for c in data if str(c.get("creado") or "")[:19] >= _corte]
+        except Exception:
+            pass
+    return data
 
 
 def candidato_get(cid):
@@ -326,8 +334,8 @@ def _dias_entre(a, b):
         return None
 
 
-def stats(empresa=None):
-    cands = candidatos_list(empresa)
+def stats(empresa=None, dias=None):
+    cands = candidatos_list(empresa, dias)
     conds = conductores_list(empresa)
     total = len(cands)
     contratados = [c for c in cands if c.get("status") == STATUS_CONVERSION
