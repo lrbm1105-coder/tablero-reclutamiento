@@ -167,8 +167,8 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    <h2>Pipeline de candidatos</h2>
    <div class=scroll>
     <table id=tblCand><thead><tr>
-     <th>Candidato</th><th>Telefono</th><th>Empresa</th><th>Origen</th>
-     <th>Status</th><th>Dias</th><th>Dias a contratacion</th><th>Acciones</th></tr></thead>
+     <th class=sorth data-k="candidato" onclick="sortCand('candidato')" style="cursor:pointer;user-select:none">Candidato<span class=ar></span></th><th class=sorth data-k="telefono" onclick="sortCand('telefono')" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth data-k="empresa" onclick="sortCand('empresa')" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th class=sorth data-k="origen" onclick="sortCand('origen')" style="cursor:pointer;user-select:none">Origen<span class=ar></span></th>
+     <th class=sorth data-k="status" onclick="sortCand('status')" style="cursor:pointer;user-select:none">Status<span class=ar></span></th><th class=sorth data-k="dias" onclick="sortCand('dias')" style="cursor:pointer;user-select:none">Dias<span class=ar></span></th><th class=sorth data-k="diascontr" onclick="sortCand('diascontr')" style="cursor:pointer;user-select:none">Dias a contratacion<span class=ar></span></th><th>Acciones</th></tr></thead>
      <tbody id=candBody></tbody></table>
    </div>
   </div>
@@ -301,10 +301,32 @@ async function candAdd(){
  document.getElementById('cNombre').value='';document.getElementById('cTel').value='';document.getElementById('cNotas').value='';
  cargarCand();
 }
+function candKeyVal(c,k){
+ if(k=="candidato") return (c.nombre||"").toLowerCase();
+ if(k=="telefono") return (c.telefono||"").toLowerCase();
+ if(k=="empresa") return (c.empresa||"").toLowerCase();
+ if(k=="origen") return (c.origen||"").toLowerCase();
+ if(k=="status") return (c.status||"").toLowerCase();
+ if(k=="dias"){ var f=(c.status=="Contratado"&&c.fecha_contratado)?c.fecha_contratado:null; var v=_dias(c.creado,f); return (v==null?Number.POSITIVE_INFINITY:v); }
+ if(k=="diascontr"){ var v=(c.fecha_contratado)?_dias(c.creado,c.fecha_contratado):null; return (v==null?Number.POSITIVE_INFINITY:v); }
+ return "";
+}
+async function sortCand(k){
+ var s=window._CANDSORT||{key:null,dir:1};
+ if(s.key===k) s.dir=-s.dir; else { s.key=k; s.dir=1; }
+ window._CANDSORT=s;
+ await cargarCand();
+ document.querySelectorAll("#tblCand thead .ar").forEach(function(e){e.textContent="";});
+ var el=document.querySelector('#tblCand thead th[data-k="'+k+'"] .ar');
+ if(el) el.textContent = s.dir>0?" \u25B2":" \u25BC";
+}
 async function cargarCand(){
  var q=emp()?('?empresa='+encodeURIComponent(emp())):'';
  var arr=await (await fetch('/api/candidatos'+q,{cache:'no-store'})).json();
  window._CANDS=arr;
+ if(window._CANDSORT && window._CANDSORT.key){ var _s=window._CANDSORT;
+  arr=arr.slice().sort(function(a,b){ var va=candKeyVal(a,_s.key), vb=candKeyVal(b,_s.key);
+   var r=(typeof va=="number"&&typeof vb=="number")?(va-vb):String(va).localeCompare(String(vb)); return r*_s.dir; }); }
  var puede=(ME.rol==='Reclutador'||_niv(ME.rol)>=3), admin=_niv(ME.rol)>=3;
  document.getElementById('candBody').innerHTML = arr.map(function(c){
   var col=STATUS_COLOR[c.status]||'#64748b';
