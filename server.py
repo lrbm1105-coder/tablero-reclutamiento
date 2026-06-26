@@ -277,11 +277,11 @@ async function cargarPlantilla(){
   var cls = p.necesidad>0?'n':'n ok';
   var edit = admin? '<div class=row style="margin-top:8px">'
      +'<input type=number style="width:90px" id="req_'+p.empresa+'" value="'+p.requerida+'" title="Requerida">'
-     +'<input type=number style="width:90px" id="act_'+p.empresa+'" value="'+p.actual+'" title="Actual">'
+     +'<input type=number style="width:90px;background:#f1f5f9;color:#64748b" id="act_'+p.empresa+'" value="'+p.actual+'" title="Activos (automatico)" readonly>'
      +'<button class="b" onclick="plantSet(\\''+p.empresa+'\\')">Guardar</button></div>':'';
   return '<div class=kpi><div style="font-weight:700;font-size:15px">'+_esc(p.empresa)+'</div>'
    +'<div class="'+cls+'">'+p.necesidad+'</div>'
-   +'<div class=l>Necesidad &nbsp; (Requerida '+p.requerida+' &minus; Actual '+p.actual+')</div>'
+   +'<div class=l>Necesidad &nbsp; (Requerida '+p.requerida+' &minus; Activos '+p.actual+')</div>'
    +edit+'</div>';
  }).join('');
 }
