@@ -170,10 +170,16 @@ def get_secret():
 def plantilla_list():
     rows = _run("SELECT empresa, requerida, actual FROM recl_plantilla "
                 "ORDER BY empresa", fetch="all")
+    # La base "Actual" es el conteo real de conductores activos por empresa.
+    crows = _run("SELECT empresa, COUNT(*) FROM recl_conductores "
+                 "WHERE activo = 1 GROUP BY empresa", fetch="all")
+    activos = {}
+    for ce, cn in (crows or []):
+        activos[str(ce).strip().lower()] = cn
     data = []
     for e, req, act in (rows or []):
         req = req or 0
-        act = act or 0
+        act = activos.get(str(e).strip().lower(), 0)
         data.append({"empresa": e, "requerida": req, "actual": act,
                      "necesidad": max(req - act, 0)})
     return data
