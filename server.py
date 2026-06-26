@@ -491,7 +491,20 @@ async function usrDel(u){ if(!confirm('Eliminar usuario '+u+'?'))return;
 function _dias(a,b){ try{ var da=new Date(a); var db=b?new Date(b):new Date();
   return Math.max(0, Math.round((db-da)/86400000)); }catch(e){ return null; } }
 boot();
-</script></body></html>"""
+</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
+<style>
+.grid-stack-item-content{overflow:auto}
+.grid-stack-item-content>.card{height:100%;margin:0;box-sizing:border-box}
+body.gs-edit .gs-handle{cursor:move}
+#gridbar{position:fixed;left:14px;bottom:14px;z-index:60;display:none;gap:8px}
+#gridbar button{font:600 13px system-ui;padding:8px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+#gridbar button.act{background:#16a34a;color:#fff;border-color:#16a34a}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
+<script>
+(function(){var grid=null,done=false,editing=false;function gridify(){try{if(typeof GridStack==="undefined")return;var tab=document.getElementById("viewDash");if(!tab||tab.offsetParent===null||tab.querySelector(".grid-stack"))return;var cards=[].slice.call(tab.querySelectorAll(".card"));if(!cards.length)return;function slug(s){return (s||"").toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"").slice(0,28);}var used={};var meta=cards.map(function(c,i){var head=c.querySelector("h1,h2,h3,h4");var id=slug(head?head.textContent:"")||("card-"+i);if(used[id])id=id+"-"+i;used[id]=1;var ratio=c.offsetWidth/(tab.clientWidth||1240);var w=Math.min(12,Math.max(3,Math.round(ratio*12)));var h=Math.max(2,Math.ceil((c.offsetHeight+16)/80));return {c:c,id:id,w:w,h:h,head:head};});var gridEl=document.createElement("div");gridEl.className="grid-stack";meta.forEach(function(m){var item=document.createElement("div");item.className="grid-stack-item";item.setAttribute("gs-w",m.w);item.setAttribute("gs-h",m.h);item.setAttribute("gs-id",m.id);var content=document.createElement("div");content.className="grid-stack-item-content";if(m.head)m.head.classList.add("gs-handle");content.appendChild(m.c);item.appendChild(content);gridEl.appendChild(item);});var kpis=tab.querySelector(".kpis");[].slice.call(tab.children).forEach(function(ch){if(ch===kpis||ch.tagName==="FOOTER"||ch.classList.contains("grid-stack"))return;if(ch.classList.contains("card")||ch.classList.contains("two")||ch.classList.contains("grid2")||ch.classList.contains("grid3")||!ch.querySelector(".card"))ch.remove();});if(kpis&&kpis.parentElement===tab)kpis.after(gridEl);else tab.insertBefore(gridEl,tab.firstChild);grid=GridStack.init({column:12,cellHeight:80,margin:8,float:false,disableDrag:true,disableResize:true,handle:".gs-handle"},gridEl);try{var saved=JSON.parse(localStorage.getItem("recl_grid_v1")||"null");if(saved&&saved.length){saved.forEach(function(n){var el=gridEl.querySelector('[gs-id="'+n.id+'"]');if(el)grid.update(el,{x:n.x,y:n.y,w:n.w,h:n.h});});}}catch(e){}grid.on("change",function(){try{localStorage.setItem("recl_grid_v1",JSON.stringify(grid.save(false)));}catch(e){}});grid.on("resizestop",function(ev,el){try{var cv=el.querySelector("canvas");if(cv&&window.Chart&&Chart.getChart){var ch=Chart.getChart(cv);if(ch)ch.resize();}}catch(e){}});var bar=document.createElement("div");bar.id="gridbar";var bE=document.createElement("button");bE.textContent="Editar acomodo";var bR=document.createElement("button");bR.textContent="Restablecer";bar.appendChild(bE);bar.appendChild(bR);document.body.appendChild(bar);bE.onclick=function(){editing=!editing;grid.enableMove(editing);grid.enableResize(editing);document.body.classList.toggle("gs-edit",editing);bE.classList.toggle("act",editing);bE.textContent=editing?"Listo":"Editar acomodo";};bR.onclick=function(){try{localStorage.removeItem("recl_grid_v1");}catch(e){}location.reload();};done=true;}catch(e){}}setInterval(function(){try{if(!done)gridify();var bar=document.getElementById("gridbar");var vd=document.getElementById("viewDash");if(bar&&vd)bar.style.display=(vd.offsetParent!==null)?"flex":"none";}catch(e){}},600);})();
+</script>
+</body></html>"""
 
 
 class Handler(BaseHTTPRequestHandler):
