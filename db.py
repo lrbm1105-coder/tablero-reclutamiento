@@ -80,7 +80,11 @@ def init():
         id BIGINT PRIMARY KEY, empresa TEXT, nombre TEXT, telefono TEXT,
         origen TEXT, status TEXT, motivo_rechazo TEXT, reclutador TEXT,
         creado TEXT, actualizado TEXT, fecha_contratado TEXT,
-        fecha_rechazo TEXT, notas TEXT)""")
+        fecha_rechazo TEXT, notas TEXT, notas_actualizado TEXT)""")
+    try:
+        _run("ALTER TABLE recl_candidatos ADD COLUMN IF NOT EXISTS notas_actualizado TEXT")
+    except Exception:
+        pass
     _run("""CREATE TABLE IF NOT EXISTS recl_conductores(
         id BIGINT PRIMARY KEY, empresa TEXT, nombre TEXT, telefono TEXT,
         activo INTEGER DEFAULT 1, fecha_alta TEXT, fecha_baja TEXT,
@@ -196,7 +200,7 @@ def plantilla_set(empresa, requerida, actual):
 
 COLS_CAND = ["id", "empresa", "nombre", "telefono", "origen", "status",
              "motivo_rechazo", "reclutador", "creado", "actualizado",
-             "fecha_contratado", "fecha_rechazo", "notas"]
+             "fecha_contratado", "fecha_rechazo", "notas", "notas_actualizado"]
 
 
 def candidatos_list(empresa=None, dias=None):
@@ -268,6 +272,9 @@ def candidato_editar(cid, campos):
         return False
     vals.append(_ahora())
     sets.append(f"actualizado = {PH}")
+    if "notas" in campos:
+        sets.append(f"notas_actualizado = {PH}")
+        vals.append(_ahora())
     vals.append(cid)
     _run(f"UPDATE recl_candidatos SET {', '.join(sets)} WHERE id = {PH}", tuple(vals))
     return True
