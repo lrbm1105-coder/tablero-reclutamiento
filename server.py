@@ -254,7 +254,7 @@ function permisos(){
  var n=_niv(ME.rol);
  document.querySelectorAll('.perm-admin').forEach(function(e){e.style.display=(n>=3?'':'none');});
  document.querySelectorAll('.perm-recluta').forEach(function(e){e.style.display=((ME.rol==='Reclutador'||n>=3)?'':'none');});
- document.querySelectorAll('.perm-rh').forEach(function(e){e.style.display=((ME.rol==='RH'||n>=3)?'':'none');});
+ document.querySelectorAll('.perm-rh').forEach(function(e){e.style.display=((ME.rol==='RH'||ME.rol==='Reclutador'||n>=3)?'':'none');});
 }
 function showTab(w){
  document.getElementById('viewFlujo').classList.toggle('hide', w!=='flujo');
@@ -344,7 +344,7 @@ async function cargarCand(){
   }
   if(puede) acc+=' <button class="b s" style="padding:4px 8px" onclick="candNota('+c.id+')" title="Editar observacion">&#9998;</button>';
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="candDel('+c.id+')">&#10005;</button>';
-  return '<tr><td><b>'+_esc(c.nombre)+'</b>'+(c.notas?'<div class=muted style="font-size:11px">'+_esc(c.notas)+'</div>':'')+'</td>'
+  return '<tr><td><b>'+_esc(c.nombre)+'</b>'+(c.notas?'<div class=muted style="font-size:11px">'+_esc(c.notas)+(c.notas_actualizado?' <span style="color:#94a3b8">(ed. '+String(c.notas_actualizado).slice(0,16).replace('T',' ')+')</span>':'')+'</div>':'')+'</td>'
    +'<td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td>'+_esc(c.origen||'')+'</td>'
    +'<td>'+pill+'</td><td>'+(dias==null?'-':dias)+'</td><td>'+(diasContr==null?'—':diasContr)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
  }).join('') || '<tr><td colspan=8 class=muted>Sin candidatos aun.</td></tr>';
@@ -644,7 +644,7 @@ class Handler(BaseHTTPRequestHandler):
             db.candidato_del(data.get("id"))
             return self._json({"ok": True})
         if path == "/api/conductores/add":
-            if not rh():
+            if not (rh() or reclutador()):
                 return self._json({"ok": False, "error": "solo RH"}, 403)
             emp = data.get("empresa")
             if emp not in db.EMPRESAS:
@@ -655,12 +655,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": False, "error": "ese conductor ya esta en la lista de activos"})
             return self._json({"ok": True})
         if path == "/api/conductores/baja":
-            if not rh():
+            if not (rh() or reclutador()):
                 return self._json({"ok": False, "error": "solo RH"}, 403)
             db.conductor_baja(data.get("id"), data.get("motivo") or "No especifico")
             return self._json({"ok": True})
         if path == "/api/conductores/reactivar":
-            if not rh():
+            if not (rh() or reclutador()):
                 return self._json({"ok": False, "error": "solo RH"}, 403)
             db.conductor_reactivar(data.get("id"))
             return self._json({"ok": True})
