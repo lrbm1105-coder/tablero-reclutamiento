@@ -328,6 +328,16 @@ def conductor_reactivar(cid):
          f"motivo_baja = {PH} WHERE id = {PH}", (None, None, cid))
 
 
+def conductor_cambiar_empresa(cid):
+    r = _run(f"SELECT empresa FROM recl_conductores WHERE id = {PH}", (cid,), "one")
+    if not r:
+        return None
+    actual = (r[0] or "").strip()
+    nueva = "TNIR" if actual == "Cryogenics" else "Cryogenics"
+    _run(f"UPDATE recl_conductores SET empresa = {PH} WHERE id = {PH}", (nueva, cid))
+    return nueva
+
+
 def conductor_del(cid):
     _run(f"DELETE FROM recl_conductores WHERE id = {PH}", (cid,))
 
