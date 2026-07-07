@@ -202,6 +202,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
   </div>
  </div>
  <div id=viewDash class=hide><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button></div>
+  <div class="row" style="margin:0 0 12px;gap:8px;align-items:center"><span class=muted style="font-size:13px">Empresa:</span><select id=dashEmp onchange="cargarDash()"><option value="">Ambas empresas</option><option value="Cryogenics">Cryogenics</option><option value="TNIR">TNIR</option></select></div>
   <div class="grid kpis" id=kpiCards></div>
   <div class=two>
    <div class=card><h2>Embudo de reclutamiento</h2><div class=chartbox><canvas id=chEmbudo></canvas></div></div>
@@ -395,12 +396,14 @@ function filtrarCond(){
 async function cargarCond(){
  var q=_qs();
  var arr=await (await fetch('/api/conductores'+q,{cache:'no-store'})).json();
- var rh=(ME.rol==='RH'||_niv(ME.rol)>=3), admin=_niv(ME.rol)>=3;
+ window._CONDS=arr;
+ var rh=(ME.rol==='RH'||ME.rol==='Reclutador'||_niv(ME.rol)>=3), admin=_niv(ME.rol)>=3;
  var activos=(arr||[]).filter(function(c){return c.activo;});
  var bajas=(arr||[]).filter(function(c){return !c.activo;});
  document.getElementById('condBody').innerHTML = activos.map(function(c){
   var acc='';
   if(rh) acc='<button class="b r" style="padding:4px 8px" onclick="condBaja('+c.id+')">Dar de baja</button>';
+  if(rh) acc+=' <button class="b s" style="padding:4px 8px" onclick="condCambiar('+c.id+')">Cambiar compania</button>';
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="condDel('+c.id+')">&#10005;</button>';
   return '<tr><td><b>'+_esc(c.nombre)+'</b></td><td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
  }).join('') || '<tr><td colspan=4 class=muted>Sin conductores activos.</td></tr>';
@@ -432,10 +435,20 @@ async function condBaja(id){
  cargarCond();
 }
 async function condReact(id){ await fetch('/api/conductores/reactivar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); cargarCond(); }
+async function condCambiar(id){
+ var c=(window._CONDS||[]).find(function(x){return x.id==id;});
+ var actual=c?c.empresa:''; var destino=(actual==='Cryogenics')?'TNIR':'Cryogenics';
+ if(!confirm('Cambiar a '+(c?c.nombre:'este conductor')+' de '+actual+' a '+destino+'?')) return;
+ var r=await fetch('/api/conductores/cambiar_empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});
+ var j=await r.json(); if(!j.ok){ alert(j.error||'No se pudo.'); return; }
+ cargarCond(); cargarPlantilla();
+}
 async function condDel(id){ if(!confirm('Eliminar conductor del padron?'))return;
  await fetch('/api/conductores/del',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); cargarCond(); }
 async function cargarDash(){
- var q=_qs();
+ var _de=document.getElementById('dashEmp'); var _dev=_de?_de.value:'';
+ var _p=[]; if(_dev) _p.push('empresa='+encodeURIComponent(_dev)); if(window._PERIODO) _p.push('dias='+window._PERIODO);
+ var q=_p.length?('?'+_p.join('&')):'';
  var s=await (await fetch('/api/stats'+q,{cache:'no-store'})).json();
  var tc=(s.tiempo_conversion_dias==null?'-':s.tiempo_conversion_dias+' d');
  var bp=s.baja_principal?(s.baja_principal.motivo+' ('+s.baja_principal.n+')'):'-';
@@ -664,6 +677,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": False, "error": "solo RH"}, 403)
             db.conductor_reactivar(data.get("id"))
             return self._json({"ok": True})
+        if path == "/api/conductores/cambiar_empresa":
+            if not (rh() or reclutador()):
+                return self._json({"ok": False, "error": "solo RH"}, 403)
+            _ne = db.conductor_cambiar_empresa(data.get("id"))
+            if _ne is None:
+                return self._json({"ok": False, "error": "no encontrado"})
+            return self._json({"ok": True, "empresa": _ne})
         if path == "/api/conductores/del":
             if not _puede(rol, "Administrador"):
                 return self._json({"ok": False, "error": "solo admin"}, 403)
