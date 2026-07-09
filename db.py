@@ -85,6 +85,10 @@ def init():
         _run("ALTER TABLE recl_candidatos ADD COLUMN IF NOT EXISTS notas_actualizado TEXT")
     except Exception:
         pass
+    try:
+        _run("ALTER TABLE recl_candidatos ADD COLUMN IF NOT EXISTS tipo TEXT")
+    except Exception:
+        pass
     _run("""CREATE TABLE IF NOT EXISTS recl_conductores(
         id BIGINT PRIMARY KEY, empresa TEXT, nombre TEXT, telefono TEXT,
         activo INTEGER DEFAULT 1, fecha_alta TEXT, fecha_baja TEXT,
@@ -200,16 +204,22 @@ def plantilla_set(empresa, requerida, actual):
 
 COLS_CAND = ["id", "empresa", "nombre", "telefono", "origen", "status",
              "motivo_rechazo", "reclutador", "creado", "actualizado",
-             "fecha_contratado", "fecha_rechazo", "notas", "notas_actualizado"]
+             "fecha_contratado", "fecha_rechazo", "notas", "notas_actualizado",
+             "tipo"]
 
 
-def candidatos_list(empresa=None, dias=None):
+def candidatos_list(empresa=None, dias=None, tipo=None):
+    conds, params = [], []
     if empresa and empresa in EMPRESAS:
-        rows = _run(f"SELECT {', '.join(COLS_CAND)} FROM recl_candidatos "
-                    f"WHERE empresa = {PH} ORDER BY creado DESC", (empresa,), "all")
+        conds.append(f"empresa = {PH}")
+        params.append(empresa)
+    if tipo == "administrativo":
+        conds.append("tipo = 'administrativo'")
     else:
-        rows = _run(f"SELECT {', '.join(COLS_CAND)} FROM recl_candidatos "
-                    f"ORDER BY creado DESC", fetch="all")
+        conds.append("(tipo IS NULL OR tipo <> 'administrativo')")
+    where = (" WHERE " + " AND ".join(conds)) if conds else ""
+    rows = _run(f"SELECT {', '.join(COLS_CAND)} FROM recl_candidatos"
+                f"{where} ORDER BY creado DESC", tuple(params), "all")
     data = _dicts(rows, COLS_CAND)
     if dias:
         try:
@@ -228,15 +238,16 @@ def candidato_get(cid):
     return d[0] if d else None
 
 
-def candidato_add(empresa, nombre, telefono, origen, reclutador, notas=""):
+def candidato_add(empresa, nombre, telefono, origen, reclutador, notas="", tipo="conductor"):
     cid = _nuevo_id()
     ahora = _ahora()
     _run(f"INSERT INTO recl_candidatos(id, empresa, nombre, telefono, origen, "
          f"status, motivo_rechazo, reclutador, creado, actualizado, "
-         f"fecha_contratado, fecha_rechazo, notas) "
-         f"VALUES ({', '.join([PH] * 13)})",
+         f"fecha_contratado, fecha_rechazo, notas, tipo) "
+         f"VALUES ({', '.join([PH] * 14)})",
          (cid, empresa, nombre, telefono, origen, "Contactado", None,
-          reclutador, ahora, ahora, None, None, notas))
+          reclutador, ahora, ahora, None, None, notas,
+          "administrativo" if tipo == "administrativo" else "conductor"))
     return cid
 
 
@@ -351,9 +362,9 @@ def _dias_entre(a, b):
         return None
 
 
-def stats(empresa=None, dias=None):
-    cands = candidatos_list(empresa, dias)
-    conds = conductores_list(empresa)
+def stats(empresa=None, dias=None, tipo=None):
+    cands = candidatos_list(empresa, dias, tipo)
+    conds = conductores_list(empresa) if tipo != "administrativo" else []
     total = len(cands)
     contratados = [c for c in cands if c.get("status") == STATUS_CONVERSION
                    or c.get("fecha_contratado")]
