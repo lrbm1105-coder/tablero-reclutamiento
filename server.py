@@ -140,6 +140,8 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
   <button id=tabFlujo class=on onclick="showTab('flujo')">Pipeline reclutamiento</button>
   <button id=tabCond onclick="showTab('cond')">Conductores activos</button>
   <button id=tabDash onclick="showTab('dash')">Dashboard KPI</button>
+  <button id=tabFlujoAdm onclick="showTab('flujoAdm')">Pipeline administrativo</button>
+  <button id=tabDashAdm onclick="showTab('dashAdm')">Dashboard administrativo</button>
  </div>
  <span class=sp></span>
  <select id=fEmpresa onchange="recargar()"><option value="">Todas las empresas</option></select>
@@ -148,7 +150,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
 </header>
 <main>
  <div id=viewFlujo><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button></div>
-  <div class=card>
+  <div class=card id=necCardWrap>
    <h2>Necesidad de reclutamiento por empresa</h2>
    <div class="grid nec" id=necCards></div>
   </div>
@@ -164,7 +166,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    </div>
   </div>
   <div class=card>
-   <h2>Pipeline de candidatos</h2>
+   <h2 id=tituloPipeline>Pipeline de candidatos</h2>
    <div class=scroll>
     <table id=tblCand><thead><tr>
      <th class=sorth data-k="candidato" onclick="sortCand('candidato')" style="cursor:pointer;user-select:none">Candidato<span class=ar></span></th><th class=sorth data-k="telefono" onclick="sortCand('telefono')" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth data-k="empresa" onclick="sortCand('empresa')" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th class=sorth data-k="origen" onclick="sortCand('origen')" style="cursor:pointer;user-select:none">Origen<span class=ar></span></th>
@@ -202,7 +204,6 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
   </div>
  </div>
  <div id=viewDash class=hide><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button></div>
-  <div class="row" style="margin:0 0 12px;gap:8px;align-items:center"><span class=muted style="font-size:13px">Empresa:</span><select id=dashEmp onchange="cargarDash()"><option value="">Ambas empresas</option><option value="Cryogenics">Cryogenics</option><option value="TNIR">TNIR</option></select></div>
   <div class="grid kpis" id=kpiCards></div>
   <div class=two>
    <div class=card><h2>Embudo de reclutamiento</h2><div class=chartbox><canvas id=chEmbudo></canvas></div></div>
@@ -210,7 +211,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
   </div>
   <div class=two>
    <div class=card><h2>Motivos de rechazo de candidatos</h2><div class=chartbox><canvas id=chRech></canvas></div></div>
-   <div class=card><h2>Motivos de baja de conductores</h2><div class=chartbox><canvas id=chBaja></canvas></div></div>
+   <div class=card id=cardBaja><h2>Motivos de baja de conductores</h2><div class=chartbox><canvas id=chBaja></canvas></div></div>
   </div>
  </div>
  <div id=modalUsr style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center">
@@ -227,7 +228,13 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
  </div>
 </main>
 <script>
-var ME=null, CAT=null, _ch={};
+var ME=null, CAT=null, _ch={}, TIPO='conductor';
+function aplicarTipoUI(){
+ var adm=(TIPO==='administrativo');
+ var nec=document.getElementById('necCardWrap'); if(nec) nec.style.display=adm?'none':'';
+ var hb=document.getElementById('cardBaja'); if(hb) hb.style.display=adm?'none':'';
+ var t1=document.getElementById('tituloPipeline'); if(t1) t1.textContent=adm?'Pipeline de candidatos administrativos':'Pipeline de candidatos';
+}
 function _esc(s){var d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML;}
 function _niv(r){return ({'RH':1,'Reclutador':1,'Administrador':3})[r]||0;}
 var COLORS=['#2563eb','#16a34a','#f59e0b','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#475569'];
@@ -258,14 +265,18 @@ function permisos(){
  document.querySelectorAll('.perm-rh').forEach(function(e){e.style.display=((ME.rol==='RH'||ME.rol==='Reclutador'||n>=3)?'':'none');});
 }
 function showTab(w){
- document.getElementById('viewFlujo').classList.toggle('hide', w!=='flujo');
+ var isFlujo=(w==='flujo'||w==='flujoAdm'), isDash=(w==='dash'||w==='dashAdm');
+ document.getElementById('viewFlujo').classList.toggle('hide', !isFlujo);
  document.getElementById('viewCond').classList.toggle('hide', w!=='cond');
- document.getElementById('viewDash').classList.toggle('hide', w!=='dash');
+ document.getElementById('viewDash').classList.toggle('hide', !isDash);
  document.getElementById('tabFlujo').classList.toggle('on', w==='flujo');
  document.getElementById('tabCond').classList.toggle('on', w==='cond');
  document.getElementById('tabDash').classList.toggle('on', w==='dash');
- if(w==='dash') cargarDash();
+ document.getElementById('tabFlujoAdm').classList.toggle('on', w==='flujoAdm');
+ document.getElementById('tabDashAdm').classList.toggle('on', w==='dashAdm');
+ if(isFlujo){ TIPO=(w==='flujoAdm')?'administrativo':'conductor'; aplicarTipoUI(); cargarPlantilla(); cargarCand(); }
  if(w==='cond') cargarCond();
+ if(isDash){ TIPO=(w==='dashAdm')?'administrativo':'conductor'; aplicarTipoUI(); cargarDash(); }
 }
 function emp(){ return document.getElementById('fEmpresa').value; }
 async function recargar(){ await cargarPlantilla(); await cargarCand(); await cargarCond();
@@ -295,7 +306,7 @@ async function plantSet(e){
 async function candAdd(){
  var b={empresa:document.getElementById('cEmpresa').value,nombre:document.getElementById('cNombre').value.trim(),
    telefono:document.getElementById('cTel').value.trim(),origen:document.getElementById('cOrigen').value,
-   notas:document.getElementById('cNotas').value.trim()};
+   notas:document.getElementById('cNotas').value.trim(),tipo:TIPO};
  if(!b.nombre||!b.telefono){ alert('Captura nombre y telefono.'); return; }
  var r=await fetch('/api/candidatos/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
  var j=await r.json(); if(!j.ok){ alert('No se pudo (requiere rol Reclutador).'); return; }
@@ -322,7 +333,7 @@ async function sortCand(k){
  if(el) el.textContent = s.dir>0?" \u25B2":" \u25BC";
 }
 window._PERIODO='';
-function _qs(){ var p=[]; var e=emp(); if(e) p.push('empresa='+encodeURIComponent(e)); if(window._PERIODO) p.push('dias='+window._PERIODO); return p.length?('?'+p.join('&')):''; }
+function _qs(){ var p=[]; var e=emp(); if(e) p.push('empresa='+encodeURIComponent(e)); if(window._PERIODO) p.push('dias='+window._PERIODO); if(TIPO) p.push('tipo='+encodeURIComponent(TIPO)); return p.length?('?'+p.join('&')):''; }
 function setPeriodo(d){ window._PERIODO=(d||'')+''; var key=(d||'')+''; document.querySelectorAll('.perBtn').forEach(function(b){ var on=(b.getAttribute('data-d')===key); b.style.background=on?'#2563eb':''; b.style.color=on?'#fff':''; }); cargarCand(); if(!document.getElementById('viewDash').classList.contains('hide')) cargarDash(); }
 async function cargarCand(){
  var q=_qs();
@@ -359,7 +370,7 @@ async function candStatus(id, sel){
  }
  await fetch('/api/candidatos/status',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({id:id,status:status,motivo_rechazo:motivo})});
- if(status==='Contratado'){
+ if(status==='Contratado' && TIPO==='conductor'){
   var cc=(window._CANDS||[]).find(function(x){return x.id==id;});
   if(cc && confirm('El candidato '+cc.nombre+' paso a Contratado. Agregarlo a conductores activos de '+cc.empresa+'?')){
    var rr=await fetch('/api/conductores/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({empresa:cc.empresa, nombre:cc.nombre, telefono:cc.telefono||''})});
@@ -446,9 +457,7 @@ async function condCambiar(id){
 async function condDel(id){ if(!confirm('Eliminar conductor del padron?'))return;
  await fetch('/api/conductores/del',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); cargarCond(); }
 async function cargarDash(){
- var _de=document.getElementById('dashEmp'); var _dev=_de?_de.value:'';
- var _p=[]; if(_dev) _p.push('empresa='+encodeURIComponent(_dev)); if(window._PERIODO) _p.push('dias='+window._PERIODO);
- var q=_p.length?('?'+_p.join('&')):'';
+ var q=_qs();
  var s=await (await fetch('/api/stats'+q,{cache:'no-store'})).json();
  var tc=(s.tiempo_conversion_dias==null?'-':s.tiempo_conversion_dias+' d');
  var bp=s.baja_principal?(s.baja_principal.motivo+' ('+s.baja_principal.n+')'):'-';
@@ -458,11 +467,9 @@ async function cargarDash(){
   ['Tiempo de conversion', tc, '#7c3aed'],
   ['Contratados', s.contratados, '#16a34a'],
   ['En proceso', s.en_proceso, '#f59e0b'],
-  ['Rechazados', s.rechazados, '#dc2626'],
-  ['Conductores activos', s.conductores_activos, '#0891b2'],
-  ['Bajas', s.bajas_total, '#dc2626'],
-  ['Motivo principal de baja', bp, '#475569']
+  ['Rechazados', s.rechazados, '#dc2626']
  ];
+ if(TIPO==='conductor'){ cards.push(['Conductores activos', s.conductores_activos, '#0891b2']); cards.push(['Bajas', s.bajas_total, '#dc2626']); cards.push(['Motivo principal de baja', bp, '#475569']); }
  document.getElementById('kpiCards').innerHTML = cards.map(function(c){
   return '<div class=kpi><div class=v style="color:'+c[2]+'">'+_esc(c[1])+'</div><div class=l>'+_esc(c[0])+'</div></div>';
  }).join('');
@@ -586,11 +593,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/plantilla":
             return self._json(db.plantilla_list())
         if path == "/api/candidatos":
-            return self._json(db.candidatos_list(qs.get("empresa"), qs.get("dias")))
+            return self._json(db.candidatos_list(qs.get("empresa"), qs.get("dias"), qs.get("tipo")))
         if path == "/api/conductores":
             return self._json(db.conductores_list(qs.get("empresa")))
         if path == "/api/stats":
-            return self._json(db.stats(qs.get("empresa"), qs.get("dias")))
+            return self._json(db.stats(qs.get("empresa"), qs.get("dias"), qs.get("tipo")))
         if path == "/api/usuarios":
             if not _puede(u["rol"], "Administrador"):
                 return self._json({"error": "solo admin"}, 403)
@@ -639,7 +646,8 @@ class Handler(BaseHTTPRequestHandler):
             db.candidato_add(emp, str(data.get("nombre", "")).strip(),
                              str(data.get("telefono", "")).strip(),
                              data.get("origen") or "", u["nombre"],
-                             str(data.get("notas", "")).strip())
+                             str(data.get("notas", "")).strip(),
+                             data.get("tipo") or "conductor")
             return self._json({"ok": True})
         if path == "/api/candidatos/status":
             if not reclutador():
@@ -716,3 +724,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+X
