@@ -321,7 +321,7 @@ async function cargarPlantillaAdm(){
  var el=document.getElementById('admReqCards'); if(!el) return;
  el.innerHTML = (pl||[]).map(function(p){
   var cls=p.necesidad>0?'n':'n ok';
-  var del=puede?'<button class="b r" style="padding:3px 8px;margin-top:8px" onclick="admReqDel(\''+encodeURIComponent(p.puesto)+'\')">Eliminar</button>':'';
+  var del=puede?'<button class="b r" style="padding:3px 8px;margin-top:8px" onclick="admReqDel(\\''+encodeURIComponent(p.puesto)+'\\')">Eliminar</button>':'';
   return '<div class=kpi><div style="font-weight:700;font-size:15px">'+_esc(p.puesto)+'</div>'
    +'<div class="'+cls+'">'+p.necesidad+'</div>'
    +'<div class=l>Necesidad &nbsp; (Requeridos '+p.requerida+' &minus; Contratados '+p.actual+')</div>'+del+'</div>';
@@ -772,3 +772,4 @@ def main():
 if __name__ == "__main__":
     main()
 X
+
