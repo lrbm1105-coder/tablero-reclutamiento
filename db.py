@@ -89,6 +89,12 @@ def init():
         _run("ALTER TABLE recl_candidatos ADD COLUMN IF NOT EXISTS tipo TEXT")
     except Exception:
         pass
+    try:
+        _run("ALTER TABLE recl_candidatos ADD COLUMN IF NOT EXISTS puesto TEXT")
+    except Exception:
+        pass
+    _run("""CREATE TABLE IF NOT EXISTS recl_plantilla_adm(
+        puesto TEXT PRIMARY KEY, requerida INTEGER DEFAULT 0)""")
     _run("""CREATE TABLE IF NOT EXISTS recl_conductores(
         id BIGINT PRIMARY KEY, empresa TEXT, nombre TEXT, telefono TEXT,
         activo INTEGER DEFAULT 1, fecha_alta TEXT, fecha_baja TEXT,
@@ -205,7 +211,7 @@ def plantilla_set(empresa, requerida, actual):
 COLS_CAND = ["id", "empresa", "nombre", "telefono", "origen", "status",
              "motivo_rechazo", "reclutador", "creado", "actualizado",
              "fecha_contratado", "fecha_rechazo", "notas", "notas_actualizado",
-             "tipo"]
+             "tipo", "puesto"]
 
 
 def candidatos_list(empresa=None, dias=None, tipo=None):
@@ -238,16 +244,16 @@ def candidato_get(cid):
     return d[0] if d else None
 
 
-def candidato_add(empresa, nombre, telefono, origen, reclutador, notas="", tipo="conductor"):
+def candidato_add(empresa, nombre, telefono, origen, reclutador, notas="", tipo="conductor", puesto=""):
     cid = _nuevo_id()
     ahora = _ahora()
     _run(f"INSERT INTO recl_candidatos(id, empresa, nombre, telefono, origen, "
          f"status, motivo_rechazo, reclutador, creado, actualizado, "
-         f"fecha_contratado, fecha_rechazo, notas, tipo) "
-         f"VALUES ({', '.join([PH] * 14)})",
+         f"fecha_contratado, fecha_rechazo, notas, tipo, puesto) "
+         f"VALUES ({', '.join([PH] * 15)})",
          (cid, empresa, nombre, telefono, origen, "Contactado", None,
           reclutador, ahora, ahora, None, None, notas,
-          "administrativo" if tipo == "administrativo" else "conductor"))
+          "administrativo" if tipo == "administrativo" else "conductor", puesto))
     return cid
 
 
@@ -273,7 +279,7 @@ def candidato_status(cid, status, motivo_rechazo=None, autor=""):
 
 
 def candidato_editar(cid, campos):
-    permitidos = ["empresa", "nombre", "telefono", "origen", "notas"]
+    permitidos = ["empresa", "nombre", "telefono", "origen", "notas", "puesto"]
     sets, vals = [], []
     for k in permitidos:
         if k in campos:
@@ -360,6 +366,40 @@ def _dias_entre(a, b):
         return (dbb - da).total_seconds() / 86400.0
     except Exception:
         return None
+
+
+def plantilla_adm_list():
+    rows = _run("SELECT puesto, requerida FROM recl_plantilla_adm ORDER BY puesto", fetch="all")
+    crows = _run("SELECT puesto, COUNT(*) FROM recl_candidatos "
+                 "WHERE tipo = 'administrativo' AND status = 'Contratado' "
+                 "GROUP BY puesto", fetch="all")
+    actuales = {}
+    for pu, n in (crows or []):
+        actuales[str(pu or "").strip().lower()] = n
+    data = []
+    for pu, req in (rows or []):
+        req = req or 0
+        act = actuales.get(str(pu or "").strip().lower(), 0)
+        data.append({"puesto": pu, "requerida": req, "actual": act,
+                     "necesidad": max(req - act, 0)})
+    return data
+
+
+def plantilla_adm_set(puesto, requerida):
+    puesto = str(puesto or "").strip()
+    if not puesto:
+        return
+    r = _run(f"SELECT 1 FROM recl_plantilla_adm WHERE puesto = {PH}", (puesto,), "one")
+    if r:
+        _run(f"UPDATE recl_plantilla_adm SET requerida = {PH} WHERE puesto = {PH}",
+             (int(requerida), puesto))
+    else:
+        _run(f"INSERT INTO recl_plantilla_adm(puesto, requerida) VALUES ({PH}, {PH})",
+             (puesto, int(requerida)))
+
+
+def plantilla_adm_del(puesto):
+    _run(f"DELETE FROM recl_plantilla_adm WHERE puesto = {PH}", (puesto,))
 
 
 def stats(empresa=None, dias=None, tipo=None):
