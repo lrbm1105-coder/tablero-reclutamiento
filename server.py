@@ -154,6 +154,15 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    <h2>Necesidad de reclutamiento por empresa</h2>
    <div class="grid nec" id=necCards></div>
   </div>
+  <div class=card id=admReqWrap style="display:none">
+   <h2>Requerimientos de personal administrativo</h2>
+   <div class="row perm-recluta" style="margin-bottom:10px">
+    <input id=apPuesto placeholder="Puesto (ej. Mecanico A)" style="min-width:200px">
+    <input id=apReq type=number value="1" style="width:90px" title="Requeridos">
+    <button class="b g" onclick="admReqSet()">Agregar / actualizar</button>
+   </div>
+   <div class="grid nec" id=admReqCards></div>
+  </div>
   <div class=card>
    <h2>Alta de candidato</h2>
    <div class=row>
@@ -161,6 +170,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
     <input id=cNombre placeholder="Nombre del candidato" style="min-width:200px">
     <input id=cTel placeholder="Telefono">
     <select id=cOrigen></select>
+    <input id=cPuesto placeholder="Puesto (opcional)" style="min-width:150px">
     <input id=cNotas placeholder="Notas (opcional)" style="min-width:160px">
     <button class="b g perm-recluta" onclick="candAdd()">Agregar candidato</button>
    </div>
@@ -169,7 +179,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    <h2 id=tituloPipeline>Pipeline de candidatos</h2>
    <div class=scroll>
     <table id=tblCand><thead><tr>
-     <th class=sorth data-k="candidato" onclick="sortCand('candidato')" style="cursor:pointer;user-select:none">Candidato<span class=ar></span></th><th class=sorth data-k="telefono" onclick="sortCand('telefono')" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth data-k="empresa" onclick="sortCand('empresa')" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th class=sorth data-k="origen" onclick="sortCand('origen')" style="cursor:pointer;user-select:none">Origen<span class=ar></span></th>
+     <th class=sorth data-k="candidato" onclick="sortCand('candidato')" style="cursor:pointer;user-select:none">Candidato<span class=ar></span></th><th class=sorth data-k="telefono" onclick="sortCand('telefono')" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth data-k="empresa" onclick="sortCand('empresa')" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th class=sorth data-k="origen" onclick="sortCand('origen')" style="cursor:pointer;user-select:none">Origen<span class=ar></span></th><th>Puesto</th>
      <th class=sorth data-k="status" onclick="sortCand('status')" style="cursor:pointer;user-select:none">Status<span class=ar></span></th><th class=sorth data-k="dias" onclick="sortCand('dias')" style="cursor:pointer;user-select:none">Dias<span class=ar></span></th><th class=sorth data-k="diascontr" onclick="sortCand('diascontr')" style="cursor:pointer;user-select:none">Dias a contratacion<span class=ar></span></th><th>Acciones</th></tr></thead>
      <tbody id=candBody></tbody></table>
    </div>
@@ -232,8 +242,10 @@ var ME=null, CAT=null, _ch={}, TIPO='conductor';
 function aplicarTipoUI(){
  var adm=(TIPO==='administrativo');
  var nec=document.getElementById('necCardWrap'); if(nec) nec.style.display=adm?'none':'';
+ var ar=document.getElementById('admReqWrap'); if(ar) ar.style.display=adm?'':'none';
  var hb=document.getElementById('cardBaja'); if(hb) hb.style.display=adm?'none':'';
  var t1=document.getElementById('tituloPipeline'); if(t1) t1.textContent=adm?'Pipeline de candidatos administrativos':'Pipeline de candidatos';
+ if(adm) cargarPlantillaAdm();
 }
 function _esc(s){var d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML;}
 function _niv(r){return ({'RH':1,'Reclutador':1,'Administrador':3})[r]||0;}
@@ -303,14 +315,36 @@ async function plantSet(e){
    body:JSON.stringify({empresa:e,requerida:req,actual:act})});
  cargarPlantilla();
 }
+async function cargarPlantillaAdm(){
+ var pl=await (await fetch('/api/plantilla_adm',{cache:'no-store'})).json();
+ var puede=(ME.rol==='Reclutador'||_niv(ME.rol)>=3);
+ var el=document.getElementById('admReqCards'); if(!el) return;
+ el.innerHTML = (pl||[]).map(function(p){
+  var cls=p.necesidad>0?'n':'n ok';
+  var del=puede?'<button class="b r" style="padding:3px 8px;margin-top:8px" onclick="admReqDel(\''+encodeURIComponent(p.puesto)+'\')">Eliminar</button>':'';
+  return '<div class=kpi><div style="font-weight:700;font-size:15px">'+_esc(p.puesto)+'</div>'
+   +'<div class="'+cls+'">'+p.necesidad+'</div>'
+   +'<div class=l>Necesidad &nbsp; (Requeridos '+p.requerida+' &minus; Contratados '+p.actual+')</div>'+del+'</div>';
+ }).join('') || '<div class=muted>Sin requerimientos. Agrega un puesto arriba.</div>';
+}
+async function admReqSet(){
+ var pu=document.getElementById('apPuesto').value.trim(), req=document.getElementById('apReq').value||0;
+ if(!pu){ alert('Escribe el puesto.'); return; }
+ var r=await fetch('/api/plantilla_adm/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({puesto:pu,requerida:req})});
+ var j=await r.json(); if(!j.ok){ alert(j.error||'No se pudo.'); return; }
+ document.getElementById('apPuesto').value=''; document.getElementById('apReq').value='1';
+ cargarPlantillaAdm();
+}
+async function admReqDel(pu){ if(!confirm('Eliminar el requerimiento?'))return;
+ await fetch('/api/plantilla_adm/del',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({puesto:decodeURIComponent(pu)})}); cargarPlantillaAdm(); }
 async function candAdd(){
  var b={empresa:document.getElementById('cEmpresa').value,nombre:document.getElementById('cNombre').value.trim(),
    telefono:document.getElementById('cTel').value.trim(),origen:document.getElementById('cOrigen').value,
-   notas:document.getElementById('cNotas').value.trim(),tipo:TIPO};
+   notas:document.getElementById('cNotas').value.trim(),tipo:TIPO,puesto:(document.getElementById('cPuesto')?document.getElementById('cPuesto').value.trim():'')};
  if(!b.nombre||!b.telefono){ alert('Captura nombre y telefono.'); return; }
  var r=await fetch('/api/candidatos/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
  var j=await r.json(); if(!j.ok){ alert('No se pudo (requiere rol Reclutador).'); return; }
- document.getElementById('cNombre').value='';document.getElementById('cTel').value='';document.getElementById('cNotas').value='';
+ document.getElementById('cNombre').value='';document.getElementById('cTel').value='';document.getElementById('cNotas').value='';var _cp=document.getElementById('cPuesto');if(_cp)_cp.value='';
  cargarCand();
 }
 function candKeyVal(c,k){
@@ -357,9 +391,9 @@ async function cargarCand(){
   if(puede) acc+=' <button class="b s" style="padding:4px 8px" onclick="candNota('+c.id+')" title="Editar observacion">&#9998;</button>';
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="candDel('+c.id+')">&#10005;</button>';
   return '<tr><td><b>'+_esc(c.nombre)+'</b>'+(c.notas?'<div class=muted style="font-size:11px">'+_esc(c.notas)+(c.notas_actualizado?' <span style="color:#94a3b8">(ed. '+String(c.notas_actualizado).slice(0,16).replace('T',' ')+')</span>':'')+'</div>':'')+'</td>'
-   +'<td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td>'+_esc(c.origen||'')+'</td>'
+   +'<td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td>'+_esc(c.origen||'')+'</td><td>'+_esc(c.puesto||'')+'</td>'
    +'<td>'+pill+'</td><td>'+(dias==null?'-':dias)+'</td><td>'+(diasContr==null?'—':diasContr)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
- }).join('') || '<tr><td colspan=8 class=muted>Sin candidatos aun.</td></tr>';
+ }).join('') || '<tr><td colspan=9 class=muted>Sin candidatos aun.</td></tr>';
 }
 async function candStatus(id, sel){
  var status=sel.value, motivo=null;
@@ -592,6 +626,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "no autorizado"}, 401)
         if path == "/api/plantilla":
             return self._json(db.plantilla_list())
+        if path == "/api/plantilla_adm":
+            return self._json(db.plantilla_adm_list())
         if path == "/api/candidatos":
             return self._json(db.candidatos_list(qs.get("empresa"), qs.get("dias"), qs.get("tipo")))
         if path == "/api/conductores":
@@ -637,6 +673,16 @@ class Handler(BaseHTTPRequestHandler):
             db.plantilla_set(data.get("empresa"), data.get("requerida") or 0,
                              data.get("actual") or 0)
             return self._json({"ok": True})
+        if path == "/api/plantilla_adm/set":
+            if not (reclutador() or _puede(rol, "Administrador")):
+                return self._json({"ok": False, "error": "solo reclutador/admin"}, 403)
+            db.plantilla_adm_set(data.get("puesto"), data.get("requerida") or 0)
+            return self._json({"ok": True})
+        if path == "/api/plantilla_adm/del":
+            if not (reclutador() or _puede(rol, "Administrador")):
+                return self._json({"ok": False, "error": "solo reclutador/admin"}, 403)
+            db.plantilla_adm_del(data.get("puesto"))
+            return self._json({"ok": True})
         if path == "/api/candidatos/add":
             if not reclutador():
                 return self._json({"ok": False, "error": "solo reclutador"}, 403)
@@ -647,7 +693,8 @@ class Handler(BaseHTTPRequestHandler):
                              str(data.get("telefono", "")).strip(),
                              data.get("origen") or "", u["nombre"],
                              str(data.get("notas", "")).strip(),
-                             data.get("tipo") or "conductor")
+                             data.get("tipo") or "conductor",
+                             str(data.get("puesto", "")).strip())
             return self._json({"ok": True})
         if path == "/api/candidatos/status":
             if not reclutador():
