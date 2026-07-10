@@ -439,6 +439,16 @@ def stats(empresa=None, dias=None, tipo=None):
     if bajas_motivos:
         baja_principal = max(bajas_motivos.items(), key=lambda x: x[1])
     activos = sum(1 for c in conds if c.get("activo"))
+    bajas_periodo = bajas
+    if dias:
+        try:
+            from datetime import timedelta
+            _cb = (datetime.now() - timedelta(days=int(dias))).strftime("%Y-%m-%dT%H:%M:%S")
+            bajas_periodo = [c for c in bajas if str(c.get("fecha_baja") or "")[:19] >= _cb]
+        except Exception:
+            bajas_periodo = bajas
+    n_bp = len(bajas_periodo)
+    rotacion = round(n_bp / activos * 100, 1) if activos else 0.0
     return {
         "empresa": empresa or "Todas",
         "contactados": total,
@@ -455,4 +465,6 @@ def stats(empresa=None, dias=None, tipo=None):
         "baja_principal": ({"motivo": baja_principal[0], "n": baja_principal[1]}
                            if baja_principal else None),
         "conductores_activos": activos,
+        "rotacion": rotacion,
+        "bajas_periodo": n_bp,
     }
