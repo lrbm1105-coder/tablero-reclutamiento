@@ -503,7 +503,7 @@ async function cargarDash(){
   ['En proceso', s.en_proceso, '#f59e0b'],
   ['Rechazados', s.rechazados, '#dc2626']
  ];
- if(TIPO==='conductor'){ cards.push(['Conductores activos', s.conductores_activos, '#0891b2']); cards.push(['Bajas', s.bajas_total, '#dc2626']); cards.push(['Motivo principal de baja', bp, '#475569']); }
+ if(TIPO==='conductor'){ cards.push(['Conductores activos', s.conductores_activos, '#0891b2']); cards.push(['Rotacion de personal', (s.rotacion!=null?s.rotacion:0)+'%', '#f59e0b']); cards.push(['Bajas', s.bajas_total, '#dc2626']); cards.push(['Motivo principal de baja', bp, '#475569']); }
  document.getElementById('kpiCards').innerHTML = cards.map(function(c){
   return '<div class=kpi><div class=v style="color:'+c[2]+'">'+_esc(c[1])+'</div><div class=l>'+_esc(c[0])+'</div></div>';
  }).join('');
@@ -772,4 +772,3 @@ def main():
 if __name__ == "__main__":
     main()
 X
-
