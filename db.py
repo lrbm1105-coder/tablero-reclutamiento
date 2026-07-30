@@ -463,17 +463,17 @@ def stats(empresa=None, dias=None, tipo=None):
             bajas_periodo = bajas
     n_bp = len(bajas_periodo)
     rotacion = round(n_bp / activos * 100, 1) if activos else 0.0
-    # Contrataciones de operadores (tipo conductor) desde el inicio, sin filtro
-    # de dias, para las graficas del dashboard KPI.
+    # Contrataciones de operadores (tipo conductor) desde el inicio,
+    # divididas por empresa (TNIR / Cryogenics) para las graficas apiladas.
     import datetime as _dt
+    _emp_ord = ["TNIR", "Cryogenics"]
+
+    def _empk(c):
+        e = str(c.get("empresa") or "").strip()
+        return e if e in _emp_ord else (e or "Otra")
+
     _opall = candidatos_list(empresa, None, "conductor")
     _opc = [c for c in _opall if c.get("fecha_contratado")]
-    _recl = {}
-    for c in _opc:
-        _rk = (str(c.get("reclutador") or "").strip() or "Sin asignar")
-        _recl[_rk] = _recl.get(_rk, 0) + 1
-    op_por_reclutador = [{"reclutador": k, "n": v}
-                         for k, v in sorted(_recl.items(), key=lambda x: -x[1])]
 
     def _lunes(sq):
         try:
@@ -481,28 +481,58 @@ def stats(empresa=None, dias=None, tipo=None):
         except Exception:
             return None
         return d - _dt.timedelta(days=d.weekday())
-    _sem = {}
+
+    _emps = [e for e in _emp_ord if any(_empk(c) == e for c in _opc)]
+    for c in _opc:
+        e = _empk(c)
+        if e not in _emps:
+            _emps.append(e)
+
+    _semcnt = {}
     for c in _opc:
         m = _lunes(c.get("fecha_contratado"))
         if m:
-            _sem[m] = _sem.get(m, 0) + 1
-    op_por_semana = []
-    if _sem:
-        _ini = min(_sem)
-        _fin = max(_sem)
+            k = (m, _empk(c))
+            _semcnt[k] = _semcnt.get(k, 0) + 1
+    _labels_sem = []
+    if _semcnt:
+        _ws = [k[0] for k in _semcnt]
+        _ini = min(_ws)
+        _fin = max(_ws)
         _hoy = _dt.date.today()
         _hoy = _hoy - _dt.timedelta(days=_hoy.weekday())
         if _hoy > _fin:
             _fin = _hoy
         _cur = _ini
         while _cur <= _fin:
-            op_por_semana.append({"semana": _cur.isoformat(),
-                                  "n": _sem.get(_cur, 0)})
+            _labels_sem.append(_cur)
             _cur += _dt.timedelta(days=7)
+    op_semana = {
+        "labels": [d.isoformat() for d in _labels_sem],
+        "empresas": _emps,
+        "series": {e: [_semcnt.get((d, e), 0) for d in _labels_sem]
+                   for e in _emps},
+    }
+
+    _rcnt = {}
+    _rtot = {}
+    for c in _opc:
+        rk = (str(c.get("reclutador") or "").strip() or "Sin asignar")
+        k = (rk, _empk(c))
+        _rcnt[k] = _rcnt.get(k, 0) + 1
+        _rtot[rk] = _rtot.get(rk, 0) + 1
+    _labels_recl = [k for k, _ in sorted(_rtot.items(), key=lambda x: -x[1])]
+    op_reclutador = {
+        "labels": _labels_recl,
+        "empresas": _emps,
+        "series": {e: [_rcnt.get((r, e), 0) for r in _labels_recl]
+                   for e in _emps},
+    }
+
     return {
         "empresa": empresa or "Todas",
-        "op_por_semana": op_por_semana,
-        "op_por_reclutador": op_por_reclutador,
+        "op_semana": op_semana,
+        "op_reclutador": op_reclutador,
         "contactados": total,
         "contratados": n_contr,
         "rechazados": len(rechazados),
