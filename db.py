@@ -95,6 +95,12 @@ def init():
         pass
     _run("""CREATE TABLE IF NOT EXISTS recl_plantilla_adm(
         puesto TEXT PRIMARY KEY, requerida INTEGER DEFAULT 0)""")
+    _run("ALTER TABLE recl_plantilla_adm ADD COLUMN IF NOT EXISTS creado TEXT")
+    try:
+        _run(f"UPDATE recl_plantilla_adm SET creado = {PH} WHERE creado IS NULL",
+             (_ahora(),))
+    except Exception:
+        pass
     _run("""CREATE TABLE IF NOT EXISTS recl_conductores(
         id BIGINT PRIMARY KEY, empresa TEXT, nombre TEXT, telefono TEXT,
         activo INTEGER DEFAULT 1, fecha_alta TEXT, fecha_baja TEXT,
@@ -369,17 +375,24 @@ def _dias_entre(a, b):
 
 
 def plantilla_adm_list():
-    rows = _run("SELECT puesto, requerida FROM recl_plantilla_adm ORDER BY puesto", fetch="all")
-    crows = _run("SELECT puesto, COUNT(*) FROM recl_candidatos "
-                 "WHERE tipo = 'administrativo' AND status = 'Contratado' "
-                 "GROUP BY puesto", fetch="all")
-    actuales = {}
-    for pu, n in (crows or []):
-        actuales[str(pu or "").strip().lower()] = n
+    rows = _run("SELECT puesto, requerida, creado FROM recl_plantilla_adm "
+                "ORDER BY puesto", fetch="all")
+    crows = _run("SELECT puesto, fecha_contratado FROM recl_candidatos "
+                 "WHERE tipo = 'administrativo' AND status = 'Contratado'",
+                 fetch="all")
+    porpuesto = {}
+    for pu, fc in (crows or []):
+        porpuesto.setdefault(str(pu or "").strip().lower(), []).append(fc)
     data = []
-    for pu, req in (rows or []):
+    for pu, req, creado in (rows or []):
         req = req or 0
-        act = actuales.get(str(pu or "").strip().lower(), 0)
+        fcs = porpuesto.get(str(pu or "").strip().lower(), [])
+        if creado:
+            # Solo cuenta contrataciones a partir de la fecha de alta del
+            # requerimiento: un puesto nuevo arranca en 0.
+            act = sum(1 for fc in fcs if fc and str(fc) >= str(creado))
+        else:
+            act = len(fcs)
         data.append({"puesto": pu, "requerida": req, "actual": act,
                      "necesidad": max(req - act, 0)})
     return data
@@ -389,13 +402,14 @@ def plantilla_adm_set(puesto, requerida):
     puesto = str(puesto or "").strip()
     if not puesto:
         return
+    ahora = _ahora()
     r = _run(f"SELECT 1 FROM recl_plantilla_adm WHERE puesto = {PH}", (puesto,), "one")
     if r:
-        _run(f"UPDATE recl_plantilla_adm SET requerida = {PH} WHERE puesto = {PH}",
-             (int(requerida), puesto))
+        _run(f"UPDATE recl_plantilla_adm SET requerida = {PH}, creado = {PH} "
+             f"WHERE puesto = {PH}", (int(requerida), ahora, puesto))
     else:
-        _run(f"INSERT INTO recl_plantilla_adm(puesto, requerida) VALUES ({PH}, {PH})",
-             (puesto, int(requerida)))
+        _run(f"INSERT INTO recl_plantilla_adm(puesto, requerida, creado) "
+             f"VALUES ({PH}, {PH}, {PH})", (puesto, int(requerida), ahora))
 
 
 def plantilla_adm_del(puesto):
@@ -449,8 +463,46 @@ def stats(empresa=None, dias=None, tipo=None):
             bajas_periodo = bajas
     n_bp = len(bajas_periodo)
     rotacion = round(n_bp / activos * 100, 1) if activos else 0.0
+    # Contrataciones de operadores (tipo conductor) desde el inicio, sin filtro
+    # de dias, para las graficas del dashboard KPI.
+    import datetime as _dt
+    _opall = candidatos_list(empresa, None, "conductor")
+    _opc = [c for c in _opall if c.get("fecha_contratado")]
+    _recl = {}
+    for c in _opc:
+        _rk = (str(c.get("reclutador") or "").strip() or "Sin asignar")
+        _recl[_rk] = _recl.get(_rk, 0) + 1
+    op_por_reclutador = [{"reclutador": k, "n": v}
+                         for k, v in sorted(_recl.items(), key=lambda x: -x[1])]
+
+    def _lunes(sq):
+        try:
+            d = _dt.datetime.strptime(str(sq)[:10], "%Y-%m-%d").date()
+        except Exception:
+            return None
+        return d - _dt.timedelta(days=d.weekday())
+    _sem = {}
+    for c in _opc:
+        m = _lunes(c.get("fecha_contratado"))
+        if m:
+            _sem[m] = _sem.get(m, 0) + 1
+    op_por_semana = []
+    if _sem:
+        _ini = min(_sem)
+        _fin = max(_sem)
+        _hoy = _dt.date.today()
+        _hoy = _hoy - _dt.timedelta(days=_hoy.weekday())
+        if _hoy > _fin:
+            _fin = _hoy
+        _cur = _ini
+        while _cur <= _fin:
+            op_por_semana.append({"semana": _cur.isoformat(),
+                                  "n": _sem.get(_cur, 0)})
+            _cur += _dt.timedelta(days=7)
     return {
         "empresa": empresa or "Todas",
+        "op_por_semana": op_por_semana,
+        "op_por_reclutador": op_por_reclutador,
         "contactados": total,
         "contratados": n_contr,
         "rechazados": len(rechazados),
