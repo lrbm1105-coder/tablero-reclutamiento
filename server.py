@@ -517,11 +517,39 @@ async function cargarDash(){
  barChart('chBaja', Object.keys(s.bajas_motivos), Object.values(s.bajas_motivos), '#dc2626');
  var rowOps=document.getElementById('rowOps'); if(rowOps) rowOps.style.display=(TIPO==='conductor')?'':'none';
  if(TIPO==='conductor'){
-  barChart('chOpSem', (s.op_por_semana||[]).map(function(x){return x.semana;}), (s.op_por_semana||[]).map(function(x){return x.n;}), '#16a34a');
-  barChart('chOpRecl', (s.op_por_reclutador||[]).map(function(x){return x.reclutador;}), (s.op_por_reclutador||[]).map(function(x){return x.n;}), '#2563eb');
+  var _os=s.op_semana||{labels:[],empresas:[],series:{}};
+  var _lsem=(_os.labels||[]).map(function(d){var p=(d||'').split('-');return p.length===3?(p[2]+'/'+p[1]):d;});
+  stackBar('chOpSem', _lsem, _os.empresas||[], _os.series||{});
+  var _or=s.op_reclutador||{labels:[],empresas:[],series:{}};
+  stackBar('chOpRecl', _or.labels||[], _or.empresas||[], _or.series||{});
  }
 }
 function _destroy(id){ if(_ch[id]){ _ch[id].destroy(); delete _ch[id]; } }
+var _dlPlugin={id:"dl",afterDatasetsDraw:function(chart){
+ var ctx=chart.ctx; ctx.save(); ctx.textAlign="center"; ctx.font="bold 11px sans-serif";
+ var tot=[];
+ chart.data.datasets.forEach(function(ds,di){
+  var meta=chart.getDatasetMeta(di);
+  meta.data.forEach(function(bar,i){
+   var val=(ds.data[i]||0); tot[i]=(tot[i]||0)+val;
+   if(val>0){ ctx.fillStyle="#fff"; ctx.textBaseline="middle"; var mid=(bar.base!=null)?(bar.y+bar.base)/2:(bar.y-8); ctx.fillText(val, bar.x, mid); }
+  });
+ });
+ var lastMeta=chart.getDatasetMeta(chart.data.datasets.length-1);
+ if(lastMeta){ ctx.fillStyle="#0f172a"; ctx.textBaseline="bottom";
+  lastMeta.data.forEach(function(bar,i){ if((tot[i]||0)>0) ctx.fillText(tot[i], bar.x, bar.y-3); }); }
+ ctx.restore();
+}};
+function stackBar(id, labels, empresas, series){
+ var cv=document.getElementById(id); if(!cv) return; _destroy(id);
+ var COLE={"TNIR":"#2563eb","Cryogenics":"#7c3aed","Sin asignar":"#94a3b8","Otra":"#f59e0b"};
+ var ds=(empresas||[]).map(function(e){return {label:e,data:(series&&series[e])||[],backgroundColor:(COLE[e]||"#0891b2"),stack:"s"};});
+ _ch[id]=new Chart(cv,{type:"bar",data:{labels:labels,datasets:ds},
+  options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},
+   plugins:{legend:{display:true,position:"bottom",labels:{boxWidth:12,font:{size:11}}}},
+   scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,ticks:{precision:0}}}},
+  plugins:[_dlPlugin]});
+}
 function barChart(id, labels, data, color){
  var cv=document.getElementById(id); if(!cv) return; _destroy(id);
  _ch[id]=new Chart(cv,{type:'bar',data:{labels:labels,datasets:[{data:data,backgroundColor:color}]},
