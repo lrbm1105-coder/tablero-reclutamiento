@@ -223,6 +223,10 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    <div class=card><h2>Motivos de rechazo de candidatos</h2><div class=chartbox><canvas id=chRech></canvas></div></div>
    <div class=card id=cardBaja><h2>Motivos de baja de conductores</h2><div class=chartbox><canvas id=chBaja></canvas></div></div>
   </div>
+  <div class=two id=rowOps>
+   <div class=card><h2>Operadores contratados por semana</h2><div class=chartbox><canvas id=chOpSem></canvas></div></div>
+   <div class=card><h2>Operadores contratados por reclutador</h2><div class=chartbox><canvas id=chOpRecl></canvas></div></div>
+  </div>
  </div>
  <div id=modalUsr style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center">
   <div style="background:#fff;color:#0f172a;max-width:560px;width:92%;max-height:90vh;overflow:auto;border-radius:12px;padding:18px">
@@ -511,6 +515,11 @@ async function cargarDash(){
  dough('chOrigen', s.origenes);
  dough('chRech', s.rechazos_motivos);
  barChart('chBaja', Object.keys(s.bajas_motivos), Object.values(s.bajas_motivos), '#dc2626');
+ var rowOps=document.getElementById('rowOps'); if(rowOps) rowOps.style.display=(TIPO==='conductor')?'':'none';
+ if(TIPO==='conductor'){
+  barChart('chOpSem', (s.op_por_semana||[]).map(function(x){return x.semana;}), (s.op_por_semana||[]).map(function(x){return x.n;}), '#16a34a');
+  barChart('chOpRecl', (s.op_por_reclutador||[]).map(function(x){return x.reclutador;}), (s.op_por_reclutador||[]).map(function(x){return x.n;}), '#2563eb');
+ }
 }
 function _destroy(id){ if(_ch[id]){ _ch[id].destroy(); delete _ch[id]; } }
 function barChart(id, labels, data, color){
