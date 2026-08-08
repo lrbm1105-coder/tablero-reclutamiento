@@ -200,15 +200,16 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    <input id=condFilter type=search oninput="filtrarCond()" placeholder="Buscar operador por nombre, telefono o empresa..." style="margin-bottom:10px;width:100%;max-width:420px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px">
    <div class=scroll>
     <table id=tblCond><thead><tr>
-     <th>Conductor</th><th>Telefono</th><th>Empresa</th><th>Acciones</th></tr></thead>
+     <th class=sorth onclick="sortTabla('tblCond',0,this)" style="cursor:pointer;user-select:none">Conductor<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',1,this)" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',2,this)" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th>Acciones</th></tr></thead>
      <tbody id=condBody></tbody></table>
    </div>
   </div>
   <div class=card>
    <h2>Historico de bajas</h2>
+   <input id=bajasFilter type=search oninput="filtrarBajas()" placeholder="Buscar operador por nombre, empresa o motivo..." style="margin-bottom:10px;width:100%;max-width:420px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px">
    <div class=scroll>
     <table id=tblBajas><thead><tr>
-     <th>Conductor</th><th>Empresa</th><th>Motivo de baja</th><th>Fecha baja</th><th>Acciones</th></tr></thead>
+     <th class=sorth onclick="sortTabla('tblBajas',0,this)" style="cursor:pointer;user-select:none">Conductor<span class=ar></span></th><th class=sorth onclick="sortTabla('tblBajas',1,this)" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th class=sorth onclick="sortTabla('tblBajas',2,this)" style="cursor:pointer;user-select:none">Motivo de baja<span class=ar></span></th><th class=sorth onclick="sortTabla('tblBajas',3,this)" style="cursor:pointer;user-select:none">Fecha baja<span class=ar></span></th><th>Acciones</th></tr></thead>
      <tbody id=bajasBody></tbody></table>
    </div>
   </div>
@@ -436,6 +437,29 @@ async function condAdd(){
  document.getElementById('dNombre').value='';document.getElementById('dTel').value='';
  cargarCond();
 }
+function sortTabla(tblId,colIdx,th){
+ var tbl=document.getElementById(tblId); if(!tbl||!tbl.tBodies[0]) return;
+ var tb=tbl.tBodies[0];
+ var same=(tbl.getAttribute('data-sc')==String(colIdx));
+ var dir=(same && tbl.getAttribute('data-sd')=='asc')?'desc':'asc';
+ tbl.setAttribute('data-sc',String(colIdx)); tbl.setAttribute('data-sd',dir);
+ var rows=[].slice.call(tb.rows).filter(function(r){return r.cells.length>colIdx;});
+ rows.sort(function(a,b){
+  var x=(a.cells[colIdx].textContent||'').trim();
+  var y=(b.cells[colIdx].textContent||'').trim();
+  var c=x.localeCompare(y,'es',{numeric:true,sensitivity:'base'});
+  return dir=='asc'?c:-c;
+ });
+ rows.forEach(function(r){tb.appendChild(r);});
+ var hs=th.parentNode.children; for(var i=0;i<hs.length;i++){var a=hs[i].querySelector('.ar'); if(a) a.textContent='';}
+ var ar=th.querySelector('.ar'); if(ar) ar.textContent=dir=='asc'?' ▲':' ▼';
+}
+function filtrarBajas(){
+ var f=document.getElementById('bajasFilter'); if(!f) return;
+ var q=(f.value||'').toLowerCase().trim();
+ var rows=document.querySelectorAll('#bajasBody tr');
+ rows.forEach(function(tr){var t=(tr.textContent||'').toLowerCase(); tr.style.display=(!q||t.indexOf(q)>=0)?'':'none';});
+}
 function filtrarCond(){
  var f=document.getElementById("condFilter"); if(!f) return;
  var q=(f.value||"").toLowerCase().trim();
@@ -464,6 +488,7 @@ async function cargarCond(){
   var fb=(c.fecha_baja||'').slice(0,10);
   return '<tr><td>'+_esc(c.nombre)+'</td><td>'+_esc(c.empresa)+'</td><td>'+_esc(c.motivo_baja||'')+'</td><td>'+_esc(fb)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
  }).join('') || '<tr><td colspan=5 class=muted>Sin bajas registradas.</td></tr>';
+ filtrarBajas();
  try{
   var all=await (await fetch('/api/conductores',{cache:'no-store'})).json();
   var allAct=(all||[]).filter(function(c){return c.activo;});
