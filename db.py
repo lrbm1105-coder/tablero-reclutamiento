@@ -17,7 +17,7 @@ else:
     PH = "?"
     _SQLITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reclutamiento.db")
 
-EMPRESAS = ["Cryogenics", "TNIR"]
+EMPRESAS = ["Cryogenics", "TNIR", "Rasch Logistics"]
 STATUSES = ["Contactado", "Entrevista operaciones", "Documentos recibidos",
             "Documentos validados", "Citado", "Contratado", "Rechazado"]
 STATUS_CONVERSION = "Contratado"
@@ -196,12 +196,22 @@ def plantilla_list():
     activos = {}
     for ce, cn in (crows or []):
         activos[str(ce).strip().lower()] = cn
-    data = []
+    reqmap = {}
     for e, req, act in (rows or []):
-        req = req or 0
+        reqmap[str(e).strip()] = req or 0
+    data = []
+    vistos = set()
+    for e in EMPRESAS:
+        req = reqmap.get(str(e).strip(), 0)
         act = activos.get(str(e).strip().lower(), 0)
         data.append({"empresa": e, "requerida": req, "actual": act,
                      "necesidad": max(req - act, 0)})
+        vistos.add(str(e).strip())
+    for e, req in reqmap.items():
+        if str(e).strip() not in vistos:
+            act = activos.get(str(e).strip().lower(), 0)
+            data.append({"empresa": e, "requerida": req, "actual": act,
+                         "necesidad": max(req - act, 0)})
     return data
 
 
@@ -360,7 +370,7 @@ def conductor_cambiar_empresa(cid):
     if not r:
         return None
     actual = (r[0] or "").strip()
-    nueva = "TNIR" if actual == "Cryogenics" else "Cryogenics"
+    nueva = EMPRESAS[(EMPRESAS.index(actual) + 1) % len(EMPRESAS)] if actual in EMPRESAS else EMPRESAS[0]
     _run(f"UPDATE recl_conductores SET empresa = {PH} WHERE id = {PH}", (nueva, cid))
     return nueva
 
@@ -470,7 +480,7 @@ def stats(empresa=None, dias=None, tipo=None, desde=None, hasta=None):
     # Contrataciones de operadores (tipo conductor) desde el inicio,
     # divididas por empresa (TNIR / Cryogenics) para las graficas apiladas.
     import datetime as _dt
-    _emp_ord = ["TNIR", "Cryogenics"]
+    _emp_ord = ["TNIR", "Cryogenics", "Rasch Logistics"]
 
     def _empk(c):
         e = str(c.get("empresa") or "").strip()
