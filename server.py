@@ -94,6 +94,35 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Tablero de Reclutamiento</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script>
+(function(){
+  if(!window.Chart || !window.ChartDataLabels) return;
+  Chart.register(window.ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', {
+    display: function(c){ var t=c.chart.config.type; return (t==='bar'||t==='doughnut'||t==='pie'); },
+    color: function(c){ return (c.chart.config.type==='bar') ? '#334155' : '#ffffff'; },
+    font: { weight: 'bold', size: 11 },
+    anchor: function(c){ return (c.chart.config.type==='bar') ? 'end' : 'center'; },
+    align: function(c){ return (c.chart.config.type==='bar') ? 'end' : 'center'; },
+    clamp: true,
+    formatter: function(value, ctx){
+      var t=ctx.chart.config.type;
+      if(t==='doughnut' || t==='pie'){
+        var dsx=ctx.chart.data.datasets[ctx.datasetIndex] || {};
+        var arr=dsx.data || [];
+        var total=arr.reduce(function(a,b){return a+(Number(b)||0);},0);
+        var v=Number(value)||0;
+        if(!total || v<=0) return '';
+        var pct=v/total*100;
+        return pct<4 ? '' : Math.round(pct)+'%';
+      }
+      var n=Number(value);
+      return (!n) ? '' : n;
+    }
+  });
+})();
+</script>
 <style>
  :root{--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;--bd:#e2e8f0;
    --blue:#2563eb;--green:#16a34a;--amber:#f59e0b;--red:#dc2626;--purple:#7c3aed}
