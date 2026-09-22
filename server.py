@@ -67,7 +67,7 @@ LOGIN_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
 </style></head><body>
 <div class=box>
  <h1>Tablero de Reclutamiento</h1>
- <p>Control de operadores - Cryogenics y TNIR</p>
+ <p>Control de operadores - Cryogenics, TNIR y Rasch Logistics</p>
  <input id=usuario placeholder=Usuario autocomplete=username>
  <input id=password type=password placeholder=Contrasena autocomplete=current-password>
  <div class=err id=err></div>
@@ -526,10 +526,12 @@ async function cargarCond(){
   var total=allAct.length;
   var nC=allAct.filter(function(c){return c.empresa==='Cryogenics';}).length;
   var nT=allAct.filter(function(c){return c.empresa==='TNIR';}).length;
+ var nR=allAct.filter(function(c){return c.empresa==='Rasch Logistics';}).length;
   function pct(n){return total? Math.round(n/total*100):0;}
   document.getElementById('condCounts').innerHTML =
     '<div class=kpi><div class=v style="color:#0891b2">'+nC+' <span style="font-size:15px;color:#64748b">('+pct(nC)+'%)</span></div><div class=l>Activos Cryogenics</div></div>'
-   +'<div class=kpi><div class=v style="color:#2563eb">'+nT+' <span style="font-size:15px;color:#64748b">('+pct(nT)+'%)</span></div><div class=l>Activos TNIR</div></div>';
+   +'<div class=kpi><div class=v style="color:#2563eb">'+nT+' <span style="font-size:15px;color:#64748b">('+pct(nT)+'%)</span></div><div class=l>Activos TNIR</div></div>'
+ +'<div class=kpi><div class=v style="color:#059669">'+nR+' <span style="font-size:15px;color:#64748b">('+pct(nR)+'%)</span></div><div class=l>Activos Rasch Logistics</div></div>';
  }catch(e){}
 }
 async function condBaja(id){
@@ -542,7 +544,7 @@ async function condBaja(id){
 async function condReact(id){ await fetch('/api/conductores/reactivar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); cargarCond(); }
 async function condCambiar(id){
  var c=(window._CONDS||[]).find(function(x){return x.id==id;});
- var actual=c?c.empresa:''; var destino=(actual==='Cryogenics')?'TNIR':'Cryogenics';
+ var actual=c?c.empresa:''; var _emps=(window.CAT&&CAT.empresas)||['Cryogenics','TNIR','Rasch Logistics'];var _ix=_emps.indexOf(actual);var destino=_emps[(_ix+1)%_emps.length]||_emps[0];
  if(!confirm('Cambiar a '+(c?c.nombre:'este conductor')+' de '+actual+' a '+destino+'?')) return;
  var r=await fetch('/api/conductores/cambiar_empresa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});
  var j=await r.json(); if(!j.ok){ alert(j.error||'No se pudo.'); return; }
@@ -598,7 +600,7 @@ var _dlPlugin={id:"dl",afterDatasetsDraw:function(chart){
 }};
 function stackBar(id, labels, empresas, series){
  var cv=document.getElementById(id); if(!cv) return; _destroy(id);
- var COLE={"TNIR":"#2563eb","Cryogenics":"#7c3aed","Sin asignar":"#94a3b8","Otra":"#f59e0b"};
+ var COLE={"TNIR":"#2563eb","Cryogenics":"#7c3aed","Rasch Logistics":"#059669","Sin asignar":"#94a3b8","Otra":"#f59e0b"};
  var ds=(empresas||[]).map(function(e){return {label:e,data:(series&&series[e])||[],backgroundColor:(COLE[e]||"#0891b2"),stack:"s"};});
  _ch[id]=new Chart(cv,{type:"bar",data:{labels:labels,datasets:ds},
   options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},
