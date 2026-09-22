@@ -101,10 +101,10 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
   Chart.register(window.ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', {
     display: function(c){ var t=c.chart.config.type; return (t==='bar'||t==='doughnut'||t==='pie'); },
-    color: function(c){ return (c.chart.config.type==='bar') ? '#334155' : '#ffffff'; },
+    color: function(c){ if(c.chart.config.type!=='bar') return '#ffffff'; return (c.chart.data.datasets.length>1)?'#ffffff':'#334155'; },
     font: { weight: 'bold', size: 11 },
-    anchor: function(c){ return (c.chart.config.type==='bar') ? 'end' : 'center'; },
-    align: function(c){ return (c.chart.config.type==='bar') ? 'end' : 'center'; },
+    anchor: function(c){ if(c.chart.config.type!=='bar') return 'center'; return (c.chart.data.datasets.length>1)?'center':'end'; },
+    align: function(c){ if(c.chart.config.type!=='bar') return 'center'; return (c.chart.data.datasets.length>1)?'center':'end'; },
     clamp: true,
     formatter: function(value, ctx){
       var t=ctx.chart.config.type;
@@ -178,7 +178,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
  <span class=ub><a onclick="abrirUsuarios()" class="perm-admin">Usuarios</a><a onclick="salir()">Salir</a></span>
 </header>
 <main>
- <div id=viewFlujo><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button></div>
+ <div id=viewFlujo><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button><span class="muted" style="font-size:13px;margin-left:10px">o rango:</span><input type="date" class="fDesde" style="font-size:12px;padding:3px 6px"><span class="muted" style="font-size:12px">a</span><input type="date" class="fHasta" style="font-size:12px;padding:3px 6px"><button class="b s" onclick="setRango(this)">Aplicar</button><button class="b s" onclick="limpiarRango()">Limpiar</button></div>
   <div class=card id=necCardWrap>
    <h2>Necesidad de reclutamiento por empresa</h2>
    <div class="grid nec" id=necCards></div>
@@ -243,7 +243,7 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
    </div>
   </div>
  </div>
- <div id=viewDash class=hide><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button></div>
+ <div id=viewDash class=hide><div class="row" style="margin:6px 0 12px;gap:6px;align-items:center;flex-wrap:wrap"><span class=muted style="font-size:13px">Periodo:</span><button class="b s perBtn" data-d="15" onclick="setPeriodo(15)">15 dias</button><button class="b s perBtn" data-d="30" onclick="setPeriodo(30)">30 dias</button><button class="b s perBtn" data-d="60" onclick="setPeriodo(60)">60 dias</button><button class="b s perBtn" data-d="" onclick="setPeriodo(0)" style="background:#2563eb;color:#fff">Todos</button><span class="muted" style="font-size:13px;margin-left:10px">o rango:</span><input type="date" class="fDesde" style="font-size:12px;padding:3px 6px"><span class="muted" style="font-size:12px">a</span><input type="date" class="fHasta" style="font-size:12px;padding:3px 6px"><button class="b s" onclick="setRango(this)">Aplicar</button><button class="b s" onclick="limpiarRango()">Limpiar</button></div>
   <div class="grid kpis" id=kpiCards></div>
   <div class=two>
    <div class=card><h2>Embudo de reclutamiento</h2><div class=chartbox><canvas id=chEmbudo></canvas></div></div>
@@ -401,8 +401,10 @@ async function sortCand(k){
  if(el) el.textContent = s.dir>0?" \u25B2":" \u25BC";
 }
 window._PERIODO='';
-function _qs(){ var p=[]; var e=emp(); if(e) p.push('empresa='+encodeURIComponent(e)); if(window._PERIODO) p.push('dias='+window._PERIODO); if(TIPO) p.push('tipo='+encodeURIComponent(TIPO)); return p.length?('?'+p.join('&')):''; }
-function setPeriodo(d){ window._PERIODO=(d||'')+''; var key=(d||'')+''; document.querySelectorAll('.perBtn').forEach(function(b){ var on=(b.getAttribute('data-d')===key); b.style.background=on?'#2563eb':''; b.style.color=on?'#fff':''; }); cargarCand(); if(!document.getElementById('viewDash').classList.contains('hide')) cargarDash(); }
+function _qs(){ var p=[]; var e=emp(); if(e) p.push('empresa='+encodeURIComponent(e)); if(window._DESDE||window._HASTA){ if(window._DESDE) p.push('desde='+window._DESDE); if(window._HASTA) p.push('hasta='+window._HASTA); } else if(window._PERIODO){ p.push('dias='+window._PERIODO); } if(TIPO) p.push('tipo='+encodeURIComponent(TIPO)); return p.length?('?'+p.join('&')):''; }
+function setRango(btn){ var row=btn.closest('.row')||btn.parentNode; var d=(row.querySelector('.fDesde')||{}).value||''; var h=(row.querySelector('.fHasta')||{}).value||''; if(!d && !h) return; window._DESDE=d; window._HASTA=h; window._PERIODO=''; document.querySelectorAll('.fDesde').forEach(function(x){ x.value=d; }); document.querySelectorAll('.fHasta').forEach(function(x){ x.value=h; }); document.querySelectorAll('.perBtn').forEach(function(b){ b.style.background=''; b.style.color=''; }); cargarCand(); if(!document.getElementById('viewDash').classList.contains('hide')) cargarDash(); }
+function limpiarRango(){ window._DESDE=''; window._HASTA=''; document.querySelectorAll('.fDesde').forEach(function(x){ x.value=''; }); document.querySelectorAll('.fHasta').forEach(function(x){ x.value=''; }); setPeriodo(0); }
+function setPeriodo(d){ window._PERIODO=(d||'')+''; window._DESDE=''; window._HASTA=''; document.querySelectorAll('.fDesde').forEach(function(x){ x.value=''; }); document.querySelectorAll('.fHasta').forEach(function(x){ x.value=''; }); var key=(d||'')+''; document.querySelectorAll('.perBtn').forEach(function(b){ var on=(b.getAttribute('data-d')===key); b.style.background=on?'#2563eb':''; b.style.color=on?'#fff':''; }); cargarCand(); if(!document.getElementById('viewDash').classList.contains('hide')) cargarDash(); }
 async function cargarCand(){
  var q=_qs();
  var arr=await (await fetch('/api/candidatos'+q,{cache:'no-store'})).json();
@@ -720,11 +722,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/plantilla_adm":
             return self._json(db.plantilla_adm_list())
         if path == "/api/candidatos":
-            return self._json(db.candidatos_list(qs.get("empresa"), qs.get("dias"), qs.get("tipo")))
+            return self._json(db.candidatos_list(qs.get("empresa"), qs.get("dias"), qs.get("tipo"), qs.get("desde"), qs.get("hasta")))
         if path == "/api/conductores":
             return self._json(db.conductores_list(qs.get("empresa")))
         if path == "/api/stats":
-            return self._json(db.stats(qs.get("empresa"), qs.get("dias"), qs.get("tipo")))
+            return self._json(db.stats(qs.get("empresa"), qs.get("dias"), qs.get("tipo"), qs.get("desde"), qs.get("hasta")))
         if path == "/api/usuarios":
             if not _puede(u["rol"], "Administrador"):
                 return self._json({"error": "solo admin"}, 403)
