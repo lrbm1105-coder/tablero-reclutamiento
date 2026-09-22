@@ -220,7 +220,7 @@ COLS_CAND = ["id", "empresa", "nombre", "telefono", "origen", "status",
              "tipo", "puesto"]
 
 
-def candidatos_list(empresa=None, dias=None, tipo=None):
+def candidatos_list(empresa=None, dias=None, tipo=None, desde=None, hasta=None):
     conds, params = [], []
     if empresa and empresa in EMPRESAS:
         conds.append(f"empresa = {PH}")
@@ -233,7 +233,11 @@ def candidatos_list(empresa=None, dias=None, tipo=None):
     rows = _run(f"SELECT {', '.join(COLS_CAND)} FROM recl_candidatos"
                 f"{where} ORDER BY creado DESC", tuple(params), "all")
     data = _dicts(rows, COLS_CAND)
-    if dias:
+    if desde or hasta:
+        d0 = str(desde)[:10] if desde else "0000-00-00"
+        d1 = str(hasta)[:10] if hasta else "9999-99-99"
+        data = [c for c in data if d0 <= str(c.get("creado") or "")[:10] <= d1]
+    elif dias:
         try:
             from datetime import timedelta
             _corte = (datetime.now() - timedelta(days=int(dias))).strftime("%Y-%m-%dT%H:%M:%S")
@@ -416,8 +420,8 @@ def plantilla_adm_del(puesto):
     _run(f"DELETE FROM recl_plantilla_adm WHERE puesto = {PH}", (puesto,))
 
 
-def stats(empresa=None, dias=None, tipo=None):
-    cands = candidatos_list(empresa, dias, tipo)
+def stats(empresa=None, dias=None, tipo=None, desde=None, hasta=None):
+    cands = candidatos_list(empresa, dias, tipo, desde, hasta)
     conds = conductores_list(empresa) if tipo != "administrativo" else []
     total = len(cands)
     contratados = [c for c in cands if c.get("status") == STATUS_CONVERSION
