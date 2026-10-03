@@ -73,7 +73,14 @@ CRITERIOS = [
 ]
 # Cuanto vale cada puntaje del formato, como fraccion del peso del tema.
 FACTOR_PUNTOS = {0: 0.0, 3: 0.5, 5: 1.0}
-EVALUACIONES = 3                      # una por mes de periodo de prueba
+
+# A los cuantos dias de contratado se pide cada evaluacion. Van CINCO DIAS ANTES de
+# cada corte de mes (30/60/90) a proposito: la evaluacion no sirve para constatar lo
+# que ya paso, sirve para decidir el siguiente contrato, y esa decision hay que
+# tomarla antes de que venza. Pedirla el dia 30 deja cero margen.
+DIAS_EVALUACION = [25, 55, 85]
+DIAS_PRUEBA = 90                      # duracion del periodo de prueba
+EVALUACIONES = len(DIAS_EVALUACION)
 
 
 def _conn():
@@ -410,19 +417,6 @@ def conductores_list(empresa=None, solo_activos=None):
     return conductores
 
 
-def _suma_meses(fecha, meses):
-    """La misma fecha N meses despues. Si el dia no existe, cae al ultimo del mes."""
-    anio = fecha.year + (fecha.month - 1 + meses) // 12
-    mes = (fecha.month - 1 + meses) % 12 + 1
-    dia = fecha.day
-    while dia > 28:
-        try:
-            return fecha.replace(year=anio, month=mes, day=dia)
-        except ValueError:
-            dia -= 1
-    return fecha.replace(year=anio, month=mes, day=dia)
-
-
 def color_calificacion(porcentaje):
     """Semaforo del formato: 0-49 rojo, 50-69 amarillo, 70 o mas verde.
 
@@ -441,12 +435,18 @@ def color_calificacion(porcentaje):
 def estado_prueba(fecha_contratacion, evaluaciones):
     """En que va el periodo de prueba: una entrada por cada evaluacion.
 
-    Cada evaluacion vence al cumplir ese mes desde la contratacion. Mientras no
-    vence no se pide nada —pedir la de un mes que no ha pasado solo ensena a
-    ignorar el color—; vencida y sin hacer se marca en naranja; hecha, toma el
-    color de su calificacion.
+    Las evaluaciones existen para UNA decision: si al terminar el periodo de prueba
+    se le da o no contrato definitivo. Por eso solo se piden mientras ese periodo
+    sigue abierto. Pasados los `DIAS_PRUEBA` la decision ya se tomo y el operador ya
+    es de planta: una evaluacion que nunca se hizo queda fuera de plazo, no
+    pendiente. Marcarla en naranja estaria pidiendo algo que ya no se puede hacer, y
+    un color que pide lo imposible es el que ensena a ignorar todos los demas.
+
+    Mientras el periodo sigue abierto: antes de su dia no se pide nada; cumplido el
+    dia y sin hacer va en naranja; hecha, toma el color de su calificacion.
     """
-    salida = {"meses": None, "pendientes": 0, "evaluaciones": []}
+    salida = {"dias": None, "en_prueba": False, "pendientes": 0,
+              "evaluaciones": []}
     inicio = None
     if fecha_contratacion:
         try:
@@ -456,16 +456,16 @@ def estado_prueba(fecha_contratacion, evaluaciones):
     ahora = datetime.now(timezone.utc)
     hoy = datetime(ahora.year, ahora.month, ahora.day)
     if inicio:
-        cumplidos = 0
-        while cumplidos < 60 and hoy >= _suma_meses(inicio, cumplidos + 1):
-            cumplidos += 1
-        salida["meses"] = cumplidos
+        salida["dias"] = max(0, (hoy - inicio).days)
+        salida["en_prueba"] = salida["dias"] < DIAS_PRUEBA
     for numero in range(1, EVALUACIONES + 1):
+        dia_corte = DIAS_EVALUACION[numero - 1]
         hecha = ((evaluaciones or {}).get(numero)
                  or (evaluaciones or {}).get(str(numero)))
         if hecha:
             salida["evaluaciones"].append({
                 "numero": numero, "estado": "hecha",
+                "dia": DIAS_EVALUACION[numero - 1],
                 "porcentaje": hecha.get("porcentaje"),
                 "color": color_calificacion(hecha.get("porcentaje")),
                 "fecha": (hecha.get("fecha") or "")[:10]})
@@ -474,14 +474,18 @@ def estado_prueba(fecha_contratacion, evaluaciones):
         # blanco en vez de inventar una urgencia que nadie puede atender.
         if inicio is None:
             estado = "sin_fecha"
-        elif hoy >= _suma_meses(inicio, numero):
+        elif not salida["en_prueba"]:
+            # Se cerro el periodo sin que esta se hiciera. Se deja constancia —el
+            # hueco se ve— pero no se pide: ya no hay decision que apoyar.
+            estado = "fuera_de_plazo"
+        elif salida["dias"] >= dia_corte:
             estado = "pendiente"
             salida["pendientes"] += 1
         else:
             estado = "futura"
         salida["evaluaciones"].append({"numero": numero, "estado": estado,
-                                       "porcentaje": None, "color": "",
-                                       "fecha": ""})
+                                       "dia": dia_corte, "porcentaje": None,
+                                       "color": "", "fecha": ""})
     return salida
 
 

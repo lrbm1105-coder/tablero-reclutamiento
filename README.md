@@ -18,21 +18,31 @@ Sin DATABASE_URL corre con SQLite local para pruebas.
 ## Periodo de prueba y evaluaciones (F-RRHH-09)
 
 Cada conductor lleva su **fecha de contratacion** (la real, no la de captura) y
-**tres evaluaciones**, una por mes durante los tres meses de prueba. Las hace el
-**jefe de operaciones** con el que trabaja el conductor; RH las lee para decidir el
-contrato definitivo.
+**tres evaluaciones**, a los **25, 55 y 85 dias**. Van cinco dias antes de cada corte
+de mes a proposito: la evaluacion no sirve para constatar lo que ya paso, sirve para
+decidir el siguiente contrato, y esa decision hay que tomarla con margen.
+
+Las hace el **jefe de operaciones** con el que trabaja el conductor; RH las lee para
+decidir el contrato definitivo. **Pasados los 90 dias ya no aplican**: el operador
+quedo de planta y la decision se tomo. Una evaluacion que no se hizo a tiempo queda
+en gris (fuera de plazo), no en naranja — un color que pide algo imposible es el que
+ensena a ignorar todos los demas.
+
+Dos botones sobre la tabla: **Solo periodo de prueba** deja a los que siguen dentro
+de los 90 dias, y **Pendientes de evaluar primero** sube a los que ya deben una, el
+mas atrasado arriba.
 
 Los tres botones de la tabla dicen en que va cada quien:
 
 | Color | Significa |
 |---|---|
-| gris | todavia no cumple ese mes: no hay nada que pedir |
+| gris | todavia no llega a ese dia, o el periodo ya cerro: no hay nada que pedir |
 | naranja | **ya vencio y falta hacerla** |
 | rojo | 0-49 % |
 | amarillo | 50-69 % |
 | verde | 70 % o mas: luz verde para contrato definitivo |
 
-Sin fecha de contratacion los tres quedan en gris: no se puede saber que venció.
+Sin fecha de contratacion los tres quedan en gris: no se puede saber que vencio.
 
 El formulario replica el formato F-RRHH-09: ocho temas, cada uno con 0, 3 o 5
 puntos que valen 0, 0.5 y 1.0 de su peso. Los pesos suman 1.0, asi que el total es

@@ -177,6 +177,10 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
  .ev.amarillo{background:#facc15;border-color:#eab308;color:#422006}
  .ev.verde{background:#16a34a;border-color:#15803d;color:#fff}
  .fcontrat{border:1px solid #cbd5e1;border-radius:6px;padding:3px 6px;font:inherit;width:140px}
+ .toggle{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:999px;
+         padding:6px 14px;cursor:pointer;font:inherit;font-size:13px}
+ .toggle.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;font-weight:600}
+ .dias{font-size:11px;color:#64748b;display:block}
  .crit td{vertical-align:top;font-size:13px}
  .crit .op{display:block;cursor:pointer;padding:2px 0}
  .crit .op input{margin-right:5px}
@@ -246,14 +250,22 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
     <input id=dTel placeholder="Telefono">
     <button class="b g" onclick="condAdd()">Dar de alta conductor</button>
    </div>
-   <input id=condFilter type=search oninput="filtrarCond()" placeholder="Buscar operador por nombre, telefono o empresa..." style="margin-bottom:10px;width:100%;max-width:420px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px">
+   <div class=row style="margin-bottom:10px;gap:8px;align-items:center;flex-wrap:wrap">
+    <input id=condFilter type=search oninput="filtrarCond()" placeholder="Buscar operador por nombre, telefono o empresa..." style="flex:1 1 280px;max-width:420px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px">
+    <button id=btnPrueba class=toggle onclick="togglePrueba()"
+     title="Deja solo a los que siguen dentro del periodo de prueba (menos de 90 dias), que son a los que hay que evaluar antes de decidir su contrato definitivo">&#9201; Solo periodo de prueba</button>
+    <button id=btnUrgente class="toggle on" onclick="toggleUrgente()"
+     title="Sube los que ya tienen una evaluacion vencida, el mas atrasado primero">&#8593; Pendientes de evaluar primero</button>
+    <span id=condCuenta class=muted style="font-size:12px"></span>
+   </div>
    <div class="scroll alto">
     <table id=tblCond><thead><tr>
-     <th class=sorth onclick="sortTabla('tblCond',0,this)" style="cursor:pointer;user-select:none">Conductor<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',1,this)" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',2,this)" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',3,this)" style="cursor:pointer;user-select:none">Fecha contratacion<span class=ar></span></th><th title="Una evaluacion por mes durante los tres meses de prueba. Naranja = ya vencio y falta hacerla.">Evaluaciones de prueba</th><th>Acciones</th></tr></thead>
+     <th class=sorth onclick="sortTabla('tblCond',0,this)" style="cursor:pointer;user-select:none">Conductor<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',1,this)" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',2,this)" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',3,this)" style="cursor:pointer;user-select:none">Fecha contratacion<span class=ar></span></th><th title="Tres evaluaciones durante el periodo de prueba, a los 25, 55 y 85 dias. Naranja = ya vencio y falta hacerla.">Evaluaciones de prueba</th><th>Acciones</th></tr></thead>
      <tbody id=condBody></tbody></table>
    </div>
    <div class=muted style="margin-top:8px;font-size:12px">
-    Evaluaciones: <span class="ev pendiente" style="cursor:default">1</span> pendiente (ya cumplio ese mes) &middot;
+    Evaluaciones a los <b>25</b>, <b>55</b> y <b>85</b> dias &mdash; cinco antes de cada corte, para decidir el contrato con margen.
+    <span class="ev pendiente" style="cursor:default">1</span> pendiente &middot;
     <span class="ev rojo" style="cursor:default">2</span> 0-49 &middot;
     <span class="ev amarillo" style="cursor:default">2</span> 50-69 &middot;
     <span class="ev verde" style="cursor:default">3</span> 70 o mas, listo para contrato definitivo.
@@ -563,10 +575,14 @@ function botonesEval(c){
  return est.map(function(e){
   var clase='ev '+(e.estado==='hecha'?e.color:(e.estado==='pendiente'?'pendiente':''));
   var tip;
-  if(e.estado==='hecha') tip='Evaluacion '+e.numero+': '+e.porcentaje+'% ('+(e.fecha||'')+')';
-  else if(e.estado==='pendiente') tip='Evaluacion '+e.numero+' PENDIENTE: ya cumplio el mes '+e.numero;
+  var dias=(c.prueba||{}).dias;
+  if(e.estado==='hecha') tip='Evaluacion '+e.numero+' (dia '+e.dia+'): '+e.porcentaje+'% el '+(e.fecha||'');
+  else if(e.estado==='pendiente') tip='Evaluacion '+e.numero+' PENDIENTE desde el dia '+e.dia
+   +(dias!=null?' (lleva '+(dias-e.dia)+' dias de atraso)':'');
+  else if(e.estado==='fuera_de_plazo') tip='Evaluacion '+e.numero+' (dia '+e.dia+'): no se hizo y el periodo de prueba ya cerro';
   else if(e.estado==='sin_fecha') tip='Falta capturar la fecha de contratacion';
-  else tip='Evaluacion '+e.numero+': se pide al cumplir el mes '+e.numero;
+  else tip='Evaluacion '+e.numero+': se pide a los '+e.dia+' dias'
+   +(dias!=null?' (faltan '+(e.dia-dias)+')':'');
   // Se puede abrir siempre para consultarla; el boton de guardar es el que
   // respeta el rol. Asi RH lee la evaluacion del jefe sin poder alterarla.
   return '<button class="'+clase+'" title="'+_esc(tip)+'" onclick="abrirEval('+c.id+','+e.numero+')">'+e.numero+'</button>';
@@ -666,22 +682,90 @@ async function guardarEval(){
  alert('Evaluacion '+_EVAL.num+' guardada: '+j.porcentaje+'%');
 }
 
+/* Dos interruptores sobre la misma lista: uno acota a quien le toca evaluacion y
+   otro sube a los que ya la deben. El orden por urgencia viene prendido porque es
+   para lo que se mira esta pantalla. */
+var SOLO_PRUEBA=false, URGENTE_PRIMERO=true;
+
+function togglePrueba(){ SOLO_PRUEBA=!SOLO_PRUEBA;
+ document.getElementById('btnPrueba').classList.toggle('on', SOLO_PRUEBA); pintarCond(); }
+function toggleUrgente(){ URGENTE_PRIMERO=!URGENTE_PRIMERO;
+ document.getElementById('btnUrgente').classList.toggle('on', URGENTE_PRIMERO); pintarCond(); }
+
+/* Quien entra en el filtro: solo los que siguen DENTRO del periodo de prueba.
+   Pasados los 90 dias ya tienen contrato definitivo y no hay evaluacion que
+   aplicarles; esta pantalla es para decidir antes de ese corte, no despues. */
+function _enPrueba(c){
+ return !!(c.prueba||{}).en_prueba;
+}
+
+/* Que tan urgente es: dias transcurridos desde el corte mas viejo sin atender.
+   Mientras mas atrasado, mas arriba. Los que no deben nada van despues, y entre
+   ellos primero el que tiene el corte mas cerca. */
+function _urgencia(c){
+ var p=c.prueba||{}, evs=p.evaluaciones||[], dias=p.dias;
+ if(dias==null) return -1e6;                       // sin fecha: no se puede saber
+ var atraso=null, proximo=null;
+ evs.forEach(function(e){
+  if(e.estado==='pendiente'){ var a=dias-e.dia; if(atraso===null||a>atraso) atraso=a; }
+  else if(e.estado==='futura'){ var f=e.dia-dias; if(proximo===null||f<proximo) proximo=f; }
+  // `fuera_de_plazo` no suma urgencia: el periodo cerro y ya no hay que hacer nada.
+ });
+ if(atraso!==null) return 1000+atraso;             // vencidas: el mas atrasado arriba
+ if(proximo!==null) return 100-proximo;            // por vencer: el mas cercano arriba
+ return -1;                                        // todas hechas
+}
+
 async function cargarCond(){
  var q=_qs();
  var arr=await (await fetch('/api/conductores'+q,{cache:'no-store'})).json();
  window._CONDS=arr;
+ pintarCond();
+ try{
+  var all=await (await fetch('/api/conductores',{cache:'no-store'})).json();
+  var allAct=(all||[]).filter(function(c){return c.activo;});
+  var total=allAct.length;
+  var nC=allAct.filter(function(c){return c.empresa==='Cryogenics';}).length;
+  var nT=allAct.filter(function(c){return c.empresa==='TNIR';}).length;
+ var nR=allAct.filter(function(c){return c.empresa==='Rasch Logistics';}).length;
+  function pct(n){return total? Math.round(n/total*100):0;}
+  document.getElementById('condCounts').innerHTML =
+    '<div class=kpi><div class=v style="color:#0891b2">'+nC+' <span style="font-size:15px;color:#64748b">('+pct(nC)+'%)</span></div><div class=l>Activos Cryogenics</div></div>'
+   +'<div class=kpi><div class=v style="color:#2563eb">'+nT+' <span style="font-size:15px;color:#64748b">('+pct(nT)+'%)</span></div><div class=l>Activos TNIR</div></div>'
+ +'<div class=kpi><div class=v style="color:#059669">'+nR+' <span style="font-size:15px;color:#64748b">('+pct(nR)+'%)</span></div><div class=l>Activos Rasch Logistics</div></div>';
+ }catch(e){}
+}
+
+function pintarCond(){
+ var arr=window._CONDS||[];
  var rh=(ME.rol==='RH'||ME.rol==='Reclutador'||_niv(ME.rol)>=3), admin=_niv(ME.rol)>=3;
  var activos=(arr||[]).filter(function(c){return c.activo;});
  var bajas=(arr||[]).filter(function(c){return !c.activo;});
+ var total=activos.length;
+ if(SOLO_PRUEBA) activos=activos.filter(_enPrueba);
+ if(URGENTE_PRIMERO) activos=activos.slice().sort(function(a,b){
+  var d=_urgencia(b)-_urgencia(a);
+  return d||((a.nombre||'')<(b.nombre||'')?-1:1);
+ });
+ var pend=activos.filter(function(c){return (c.prueba||{}).pendientes;}).length;
+ var cuenta=document.getElementById('condCuenta');
+ if(cuenta) cuenta.textContent = (SOLO_PRUEBA?(activos.length+' de '+total+' conductores'):(total+' conductores'))
+   + (pend?(' \u00b7 '+pend+' con evaluacion pendiente'):'');
  document.getElementById('condBody').innerHTML = activos.map(function(c){
   var acc='';
   if(rh) acc='<button class="b r" style="padding:4px 8px" onclick="condBaja('+c.id+')">Dar de baja</button>';
   if(rh) acc+=' <button class="b s" style="padding:4px 8px" onclick="condCambiar('+c.id+')">Cambiar compania</button>';
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="condDel('+c.id+')">&#10005;</button>';
   var fc=(c.fecha_contratacion||'').slice(0,10);
+  var dias=(c.prueba||{}).dias;
+  // Los dias transcurridos van junto a la fecha: los cortes son 25/55/85 dias, y
+  // sin ese numero a la vista hay que sacar la cuenta de cabeza para entender el
+  // color de los botones.
+  var leyenda = (dias==null) ? ''
+   : '<span class=dias>'+dias+' dias'+((c.prueba||{}).en_prueba?' \u00b7 en prueba':' \u00b7 contrato definitivo')+'</span>';
   var celdaFecha = rh
-   ? '<input type=date class=fcontrat value="'+_esc(fc)+'" onchange="condFecha('+c.id+',this.value)">'
-   : (_esc(fc)||'<span class=muted>sin capturar</span>');
+   ? '<input type=date class=fcontrat value="'+_esc(fc)+'" onchange="condFecha('+c.id+',this.value)">'+leyenda
+   : ((_esc(fc)||'<span class=muted>sin capturar</span>')+leyenda);
   return '<tr><td><b>'+_esc(c.nombre)+'</b></td><td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td>'
    +'<td style="white-space:nowrap">'+celdaFecha+'</td>'
    +'<td style="white-space:nowrap">'+botonesEval(c)+'</td>'
@@ -696,19 +780,6 @@ async function cargarCond(){
   return '<tr><td>'+_esc(c.nombre)+'</td><td>'+_esc(c.empresa)+'</td><td>'+_esc(c.motivo_baja||'')+'</td><td>'+_esc(fb)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
  }).join('') || '<tr><td colspan=5 class=muted>Sin bajas registradas.</td></tr>';
  filtrarBajas();
- try{
-  var all=await (await fetch('/api/conductores',{cache:'no-store'})).json();
-  var allAct=(all||[]).filter(function(c){return c.activo;});
-  var total=allAct.length;
-  var nC=allAct.filter(function(c){return c.empresa==='Cryogenics';}).length;
-  var nT=allAct.filter(function(c){return c.empresa==='TNIR';}).length;
- var nR=allAct.filter(function(c){return c.empresa==='Rasch Logistics';}).length;
-  function pct(n){return total? Math.round(n/total*100):0;}
-  document.getElementById('condCounts').innerHTML =
-    '<div class=kpi><div class=v style="color:#0891b2">'+nC+' <span style="font-size:15px;color:#64748b">('+pct(nC)+'%)</span></div><div class=l>Activos Cryogenics</div></div>'
-   +'<div class=kpi><div class=v style="color:#2563eb">'+nT+' <span style="font-size:15px;color:#64748b">('+pct(nT)+'%)</span></div><div class=l>Activos TNIR</div></div>'
- +'<div class=kpi><div class=v style="color:#059669">'+nR+' <span style="font-size:15px;color:#64748b">('+pct(nR)+'%)</span></div><div class=l>Activos Rasch Logistics</div></div>';
- }catch(e){}
 }
 async function condBaja(id){
  var motivo=prompt('Motivo de baja:\\n'+CAT.motivos_baja.map(function(m,i){return (i+1)+') '+m;}).join('\\n')+'\\n\\nEscribe el numero o el texto:');
