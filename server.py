@@ -8,6 +8,8 @@ import hashlib
 import logging
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from datetime import datetime
+
 import db
 
 logging.basicConfig(level=logging.INFO)
@@ -161,6 +163,24 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
  @media(max-width:820px){.two{grid-template-columns:1fr}}
  .hide{display:none}
  .scroll{max-height:420px;overflow:auto}
+ /* La lista de conductores es la mas larga del tablero y se recorria en una
+    ventanita de 420 px. Se le da casi toda la altura de la pantalla para que el
+    scroll sea corto; el encabezado se queda fijo al desplazarse. */
+ .scroll.alto{max-height:72vh}
+ .scroll.alto thead th{position:sticky;top:0;background:#f1f5f9;z-index:1}
+ /* Semaforo de las evaluaciones del periodo de prueba. */
+ .ev{width:30px;height:28px;margin-right:4px;border-radius:7px;border:1px solid #cbd5e1;
+     background:#f8fafc;color:#64748b;font-weight:700;cursor:pointer;font-size:13px}
+ .ev:disabled{cursor:not-allowed;opacity:.55}
+ .ev.pendiente{background:#f97316;border-color:#ea580c;color:#fff}
+ .ev.rojo{background:#dc2626;border-color:#b91c1c;color:#fff}
+ .ev.amarillo{background:#facc15;border-color:#eab308;color:#422006}
+ .ev.verde{background:#16a34a;border-color:#15803d;color:#fff}
+ .fcontrat{border:1px solid #cbd5e1;border-radius:6px;padding:3px 6px;font:inherit;width:140px}
+ .crit td{vertical-align:top;font-size:13px}
+ .crit .op{display:block;cursor:pointer;padding:2px 0}
+ .crit .op input{margin-right:5px}
+ .califbox{font-size:26px;font-weight:800;padding:8px 14px;border-radius:10px;display:inline-block}
  .flexcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
 </style></head><body>
 <header>
@@ -227,10 +247,16 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
     <button class="b g" onclick="condAdd()">Dar de alta conductor</button>
    </div>
    <input id=condFilter type=search oninput="filtrarCond()" placeholder="Buscar operador por nombre, telefono o empresa..." style="margin-bottom:10px;width:100%;max-width:420px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px">
-   <div class=scroll>
+   <div class="scroll alto">
     <table id=tblCond><thead><tr>
-     <th class=sorth onclick="sortTabla('tblCond',0,this)" style="cursor:pointer;user-select:none">Conductor<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',1,this)" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',2,this)" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th>Acciones</th></tr></thead>
+     <th class=sorth onclick="sortTabla('tblCond',0,this)" style="cursor:pointer;user-select:none">Conductor<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',1,this)" style="cursor:pointer;user-select:none">Telefono<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',2,this)" style="cursor:pointer;user-select:none">Empresa<span class=ar></span></th><th class=sorth onclick="sortTabla('tblCond',3,this)" style="cursor:pointer;user-select:none">Fecha contratacion<span class=ar></span></th><th title="Una evaluacion por mes durante los tres meses de prueba. Naranja = ya vencio y falta hacerla.">Evaluaciones de prueba</th><th>Acciones</th></tr></thead>
      <tbody id=condBody></tbody></table>
+   </div>
+   <div class=muted style="margin-top:8px;font-size:12px">
+    Evaluaciones: <span class="ev pendiente" style="cursor:default">1</span> pendiente (ya cumplio ese mes) &middot;
+    <span class="ev rojo" style="cursor:default">2</span> 0-49 &middot;
+    <span class="ev amarillo" style="cursor:default">2</span> 50-69 &middot;
+    <span class="ev verde" style="cursor:default">3</span> 70 o mas, listo para contrato definitivo.
    </div>
   </div>
   <div class=card>
@@ -256,6 +282,36 @@ APP_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
   <div class=two id=rowOps>
    <div class=card><h2>Operadores contratados por semana</h2><div class=chartbox><canvas id=chOpSem></canvas></div></div>
    <div class=card><h2>Operadores contratados por reclutador</h2><div class=chartbox><canvas id=chOpRecl></canvas></div></div>
+  </div>
+ </div>
+ <div id=modalEval style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center">
+  <div style="background:#fff;color:#0f172a;max-width:820px;width:94%;max-height:92vh;overflow:auto;border-radius:12px;padding:18px">
+   <h3 style="margin:0" id=evTitulo></h3>
+   <div class=muted style="font-size:12px;margin:2px 0 12px" id=evSub></div>
+   <div class=row style="margin-bottom:10px;gap:8px;flex-wrap:wrap">
+    <input id=evJefe placeholder="Jefe inmediato" style="min-width:190px">
+    <input id=evBase placeholder="Base">
+    <input id=evPuesto placeholder="Puesto">
+    <input id=evFecha type=date title="Fecha de realizacion">
+   </div>
+   <table style="width:100%;border-collapse:collapse" class=crit>
+    <thead><tr><th style="text-align:left">Tema a evaluar</th><th style="text-align:left">Peso</th><th style="text-align:left">Puntaje</th></tr></thead>
+    <tbody id=evCrit></tbody>
+   </table>
+   <div style="display:flex;align-items:center;gap:14px;margin:14px 0;flex-wrap:wrap">
+    <span class=muted>Porcentaje de desempeno:</span>
+    <span id=evCalif class=califbox>0%</span>
+    <span id=evVeredicto style="font-weight:600"></span>
+   </div>
+   <label class=muted style="font-size:12px">Retroalimentacion sobre aspectos positivos</label>
+   <textarea id=evPos rows=3 style="width:100%;margin-bottom:10px"></textarea>
+   <label class=muted style="font-size:12px">Retroalimentacion sobre areas a desarrollar y compromisos</label>
+   <textarea id=evAreas rows=3 style="width:100%"></textarea>
+   <div style="text-align:right;margin-top:12px">
+    <span id=evSoloLectura class=muted style="display:none;margin-right:10px;font-size:12px">Solo lectura: la captura el jefe de operaciones o RH.</span>
+    <button class="b s" onclick="cerrarEval()">Cerrar</button>
+    <button class="b g" id=evGuardar onclick="guardarEval()">Guardar evaluacion</button>
+   </div>
   </div>
  </div>
  <div id=modalUsr style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center">
@@ -497,6 +553,119 @@ function filtrarCond(){
  var rows=document.querySelectorAll("#condBody tr");
  rows.forEach(function(tr){ var t=(tr.textContent||"").toLowerCase(); tr.style.display=(!q||t.indexOf(q)>=0)?"":"none"; });
 }
+/* Los tres botones del periodo de prueba, con su color.
+   Gris: todavia no cumple ese mes, no hay nada que pedir. Naranja: ya vencio y
+   falta hacerla. Rojo/amarillo/verde: ya esta hecha, con su calificacion. */
+function botonesEval(c){
+ var est=(c.prueba&&c.prueba.evaluaciones)||[];
+ if(!est.length) return '';
+ var puede=(ME.rol==='Jefe de operaciones'||ME.rol==='RH'||_niv(ME.rol)>=3);
+ return est.map(function(e){
+  var clase='ev '+(e.estado==='hecha'?e.color:(e.estado==='pendiente'?'pendiente':''));
+  var tip;
+  if(e.estado==='hecha') tip='Evaluacion '+e.numero+': '+e.porcentaje+'% ('+(e.fecha||'')+')';
+  else if(e.estado==='pendiente') tip='Evaluacion '+e.numero+' PENDIENTE: ya cumplio el mes '+e.numero;
+  else if(e.estado==='sin_fecha') tip='Falta capturar la fecha de contratacion';
+  else tip='Evaluacion '+e.numero+': se pide al cumplir el mes '+e.numero;
+  // Se puede abrir siempre para consultarla; el boton de guardar es el que
+  // respeta el rol. Asi RH lee la evaluacion del jefe sin poder alterarla.
+  return '<button class="'+clase+'" title="'+_esc(tip)+'" onclick="abrirEval('+c.id+','+e.numero+')">'+e.numero+'</button>';
+ }).join('');
+}
+
+async function condFecha(id, valor){
+ var r=await fetch('/api/conductores/fecha_contratacion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,fecha:valor||''})});
+ var j=await r.json();
+ if(!j.ok){ alert(j.error||'No se pudo guardar la fecha'); }
+ // Se espera al refresco: sin esto la tabla podia quedar un instante con la fecha
+ // vieja y los botones del color anterior, justo despues de capturarla.
+ await cargarCond();
+}
+
+var _EVAL={cid:null,num:null};
+
+async function abrirEval(cid, num){
+ var c=(window._CONDS||[]).filter(function(x){return x.id===cid;})[0]||{};
+ _EVAL={cid:cid,num:num};
+ var prev=await (await fetch('/api/evaluacion?conductor_id='+cid+'&numero='+num,{cache:'no-store'})).json();
+ var puntos=(prev&&prev.puntos)||{};
+ var puede=(ME.rol==='Jefe de operaciones'||ME.rol==='RH'||_niv(ME.rol)>=3);
+ var crit=(CAT&&CAT.criterios)||[];
+ var tema='';
+ var filas=crit.map(function(k){
+  var cab = (k.tema!==tema) ? '<tr><td colspan=3 style="background:#f1f5f9;font-weight:700;padding:6px 8px">'+_esc(k.tema)+'</td></tr>' : '';
+  tema=k.tema;
+  // Los temas sin punto medio no lo ofrecen: el formato dice "-" y poner la
+  // opcion invitaria a calificar algo que el papel no permite.
+  var ops=[[0,k.n0],[3,k.n3],[5,k.n5]].filter(function(o){return o[1];}).map(function(o){
+   var sel=(String(puntos[k.clave])===String(o[0]))?' checked':'';
+   return '<label class=op><input type=radio name="pt_'+k.clave+'" value="'+o[0]+'"'+sel+(puede?'':' disabled')+' onchange="calcEval()"> <b>'+o[0]+'</b> &mdash; '+_esc(o[1])+'</label>';
+  }).join('');
+  return cab+'<tr><td style="padding:6px 8px"><b>'+_esc(k.sub)+'</b></td>'
+   +'<td style="padding:6px 8px;white-space:nowrap" class=muted>'+Math.round(k.peso*100)+'%</td>'
+   +'<td style="padding:6px 8px">'+ops+'</td></tr>';
+ }).join('');
+ document.getElementById('evTitulo').textContent='Evaluacion '+num+' de '+((CAT&&CAT.evaluaciones)||3)+' \u2014 '+(c.nombre||'');
+ document.getElementById('evSub').textContent='F-RRHH-09 Feedback Operadores \u00b7 '+(c.empresa||'')+' \u00b7 contratado el '+((c.fecha_contratacion||'').slice(0,10)||'(sin capturar)');
+ document.getElementById('evCrit').innerHTML=filas;
+ document.getElementById('evJefe').value=(prev&&prev.jefe)||'';
+ document.getElementById('evBase').value=(prev&&prev.base)||'';
+ document.getElementById('evPuesto').value=(prev&&prev.puesto)||'Operador';
+ document.getElementById('evFecha').value=(prev&&prev.fecha)||new Date().toISOString().slice(0,10);
+ document.getElementById('evPos').value=(prev&&prev.positivos)||'';
+ document.getElementById('evAreas').value=(prev&&prev.areas)||'';
+ ['evJefe','evBase','evPuesto','evFecha','evPos','evAreas'].forEach(function(id){document.getElementById(id).disabled=!puede;});
+ document.getElementById('evGuardar').style.display=puede?'':'none';
+ document.getElementById('evSoloLectura').style.display=puede?'none':'';
+ calcEval();
+ document.getElementById('modalEval').style.display='flex';
+}
+
+function cerrarEval(){ document.getElementById('modalEval').style.display='none'; }
+
+/* El porcentaje se calcula mientras se contesta, con la misma formula del
+   servidor: quien evalua ve de inmediato en que color va a quedar. */
+function calcEval(){
+ var crit=(CAT&&CAT.criterios)||[], total=0;
+ crit.forEach(function(k){
+  var el=document.querySelector('input[name="pt_'+k.clave+'"]:checked');
+  if(!el) return;
+  var f={'0':0,'3':0.5,'5':1}[el.value]||0;
+  total+=f*k.peso;
+ });
+ var pct=Math.round(total*1000)/10;
+ var color=(pct<50)?'rojo':((pct<70)?'amarillo':'verde');
+ var caja=document.getElementById('evCalif');
+ caja.className='califbox ev '+color;
+ caja.textContent=pct+'%';
+ document.getElementById('evVeredicto').textContent =
+  (pct>=70)?'Luz verde para contrato definitivo.'
+          :((pct>=50)?'Desempeno medio: requiere seguimiento.'
+                    :'Desempeno bajo.');
+}
+
+async function guardarEval(){
+ var crit=(CAT&&CAT.criterios)||[], puntos={}, faltan=0;
+ crit.forEach(function(k){
+  var el=document.querySelector('input[name="pt_'+k.clave+'"]:checked');
+  if(el) puntos[k.clave]=parseInt(el.value,10); else faltan++;
+ });
+ if(faltan && !confirm('Faltan '+faltan+' tema(s) por calificar. Lo que no se califica cuenta como 0 y baja el porcentaje. Guardar asi?')) return;
+ var b={conductor_id:_EVAL.cid, numero:_EVAL.num, puntos:puntos,
+        jefe:document.getElementById('evJefe').value,
+        base:document.getElementById('evBase').value,
+        puesto:document.getElementById('evPuesto').value,
+        fecha:document.getElementById('evFecha').value,
+        positivos:document.getElementById('evPos').value,
+        areas:document.getElementById('evAreas').value};
+ var r=await fetch('/api/evaluacion/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+ var j=await r.json();
+ if(!j.ok){ alert(j.error||'No se pudo guardar'); return; }
+ cerrarEval();
+ await cargarCond();
+ alert('Evaluacion '+_EVAL.num+' guardada: '+j.porcentaje+'%');
+}
+
 async function cargarCond(){
  var q=_qs();
  var arr=await (await fetch('/api/conductores'+q,{cache:'no-store'})).json();
@@ -509,8 +678,15 @@ async function cargarCond(){
   if(rh) acc='<button class="b r" style="padding:4px 8px" onclick="condBaja('+c.id+')">Dar de baja</button>';
   if(rh) acc+=' <button class="b s" style="padding:4px 8px" onclick="condCambiar('+c.id+')">Cambiar compania</button>';
   if(admin) acc+=' <button class="b r" style="padding:4px 8px" onclick="condDel('+c.id+')">&#10005;</button>';
-  return '<tr><td><b>'+_esc(c.nombre)+'</b></td><td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td><td style="white-space:nowrap">'+acc+'</td></tr>';
- }).join('') || '<tr><td colspan=4 class=muted>Sin conductores activos.</td></tr>';
+  var fc=(c.fecha_contratacion||'').slice(0,10);
+  var celdaFecha = rh
+   ? '<input type=date class=fcontrat value="'+_esc(fc)+'" onchange="condFecha('+c.id+',this.value)">'
+   : (_esc(fc)||'<span class=muted>sin capturar</span>');
+  return '<tr><td><b>'+_esc(c.nombre)+'</b></td><td>'+_esc(c.telefono||'')+'</td><td>'+_esc(c.empresa)+'</td>'
+   +'<td style="white-space:nowrap">'+celdaFecha+'</td>'
+   +'<td style="white-space:nowrap">'+botonesEval(c)+'</td>'
+   +'<td style="white-space:nowrap">'+acc+'</td></tr>';
+ }).join('') || '<tr><td colspan=6 class=muted>Sin conductores activos.</td></tr>';
  filtrarCond();
  document.getElementById('bajasBody').innerHTML = bajas.map(function(c){
   var acc='';
@@ -716,7 +892,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"empresas": db.EMPRESAS, "statuses": db.STATUSES,
                                "motivos_rechazo": db.MOTIVOS_RECHAZO,
                                "origenes": db.ORIGENES, "motivos_baja": db.MOTIVOS_BAJA,
-                               "roles": db.ROLES})
+                               "roles": db.ROLES,
+                               "criterios": db.CRITERIOS,
+                               "evaluaciones": db.EVALUACIONES})
         if not u:
             return self._json({"error": "no autorizado"}, 401)
         if path == "/api/plantilla":
@@ -727,6 +905,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(db.candidatos_list(qs.get("empresa"), qs.get("dias"), qs.get("tipo"), qs.get("desde"), qs.get("hasta")))
         if path == "/api/conductores":
             return self._json(db.conductores_list(qs.get("empresa")))
+        if path == "/api/evaluacion":
+            try:
+                cid = int(qs.get("conductor_id") or 0)
+                num = int(qs.get("numero") or 0)
+            except ValueError:
+                return self._json({"error": "parametros invalidos"}, 400)
+            return self._json(db.evaluacion_get(cid, num) or {})
         if path == "/api/stats":
             return self._json(db.stats(qs.get("empresa"), qs.get("dias"), qs.get("tipo"), qs.get("desde"), qs.get("hasta")))
         if path == "/api/usuarios":
@@ -834,6 +1019,46 @@ class Handler(BaseHTTPRequestHandler):
             if _ne is None:
                 return self._json({"ok": False, "error": "no encontrado"})
             return self._json({"ok": True, "empresa": _ne})
+        if path == "/api/conductores/fecha_contratacion":
+            if not (rh() or reclutador()):
+                return self._json({"ok": False, "error": "solo RH"}, 403)
+            fecha = str(data.get("fecha") or "").strip()[:10]
+            if fecha:
+                try:
+                    datetime.strptime(fecha, "%Y-%m-%d")
+                except ValueError:
+                    return self._json({"ok": False,
+                                       "error": "la fecha va como AAAA-MM-DD"})
+            db.conductor_fecha_contratacion(data.get("id"), fecha or None)
+            return self._json({"ok": True})
+        if path == "/api/evaluacion/guardar":
+            # La hace el jefe de operaciones con el que trabaja el conductor; RH y
+            # el administrador tambien, porque alguien tiene que poder corregirla.
+            if not (rol == "Jefe de operaciones" or rh()
+                    or _puede(rol, "Administrador")):
+                return self._json({"ok": False,
+                                   "error": "solo jefe de operaciones o RH"}, 403)
+            try:
+                cid = int(data.get("conductor_id") or 0)
+                num = int(data.get("numero") or 0)
+            except (TypeError, ValueError):
+                return self._json({"ok": False, "error": "datos invalidos"})
+            if num not in range(1, db.EVALUACIONES + 1):
+                return self._json({"ok": False,
+                                   "error": f"la evaluacion va de 1 a {db.EVALUACIONES}"})
+            porcentaje = db.evaluacion_guardar(
+                cid, num, data.get("puntos") or {},
+                jefe=str(data.get("jefe") or "").strip(),
+                base=str(data.get("base") or "").strip(),
+                puesto=str(data.get("puesto") or "").strip(),
+                positivos=str(data.get("positivos") or "").strip(),
+                areas=str(data.get("areas") or "").strip(),
+                fecha=str(data.get("fecha") or "").strip()[:10] or None,
+                autor=u.get("nombre") or u.get("usuario") or "")
+            if porcentaje is None:
+                return self._json({"ok": False, "error": "no se pudo guardar"})
+            return self._json({"ok": True, "porcentaje": porcentaje,
+                               "color": db.color_calificacion(porcentaje)})
         if path == "/api/conductores/del":
             if not _puede(rol, "Administrador"):
                 return self._json({"ok": False, "error": "solo admin"}, 403)
@@ -866,4 +1091,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-X

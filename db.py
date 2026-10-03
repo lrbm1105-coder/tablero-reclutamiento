@@ -1,5 +1,6 @@
 """Capa de datos del tablero de Reclutamiento."""
 import os
+import json
 import hmac
 import base64
 import hashlib
@@ -30,7 +31,49 @@ MOTIVOS_BAJA = ["Falta de viajes", "Inconformidad con sueldo",
                 "Problema con despachadores", "Problemas con gerencia",
                 "Problemas personales", "Problema con cliente",
                 "No especifico", "Bajo rendimiento", "Indisciplina"]
-ROLES = ["Administrador", "Reclutador", "RH"]
+ROLES = ["Administrador", "Reclutador", "RH", "Jefe de operaciones"]
+
+# ---------------------------------------------------------------------------
+# Evaluacion de periodo de prueba (formato F-RRHH-09 Feedback Operadores TNIR)
+# ---------------------------------------------------------------------------
+# Tres evaluaciones, una por mes durante los tres primeros meses. Las hace el jefe
+# de operaciones con el que trabaja el conductor; RH las lee para decidir el
+# contrato definitivo.
+#
+# Cada tema se califica con 0, 3 o 5 puntos, que valen 0, 0.5 y 1.0 del peso del
+# tema. Los pesos suman 1.0, asi que el total es directamente el porcentaje de
+# desempeno. Dos temas (camara obstruida y aviso de colision) NO tienen punto
+# medio en el formato: o hubo eventos o no los hubo.
+CRITERIOS = [
+    {"clave": "camara", "tema": "Habitos de manejo Samsara",
+     "sub": "Camara obstruida", "peso": 0.05,
+     "n0": "1 o mas eventos", "n3": None, "n5": "0 eventos"},
+    {"clave": "frenados", "tema": "Habitos de manejo Samsara",
+     "sub": "Frenados bruscos", "peso": 0.05,
+     "n0": "4 o mas eventos", "n3": "1 a 3 eventos", "n5": "0 eventos"},
+    {"clave": "colision", "tema": "Habitos de manejo Samsara",
+     "sub": "Aviso probable colision", "peso": 0.05,
+     "n0": "1 o mas eventos", "n3": None, "n5": "0 eventos"},
+    {"clave": "movil", "tema": "Habitos de manejo Samsara",
+     "sub": "Uso del movil", "peso": 0.05,
+     "n0": "21 o mas eventos", "n3": "11 a 20 eventos", "n5": "0 a 10 eventos"},
+    {"clave": "diesel", "tema": "Rendimiento",
+     "sub": "Rendimiento del diesel", "peso": 0.40,
+     "n0": "2.4 o menos", "n3": "2.5 a 2.7", "n5": "2.7 a 3"},
+    {"clave": "transito", "tema": "Tiempos de transito",
+     "sub": "Viajes concluidos / llegadas", "peso": 0.20,
+     "n0": "Menos del 75%", "n3": "75% al 89%", "n5": "90% al 100%"},
+    {"clave": "tallones", "tema": "Cuidado de unidad",
+     "sub": "Tallones / banquetazos", "peso": 0.15,
+     "n0": "2 o mas accidentes", "n3": "1 accidente menor", "n5": "0 accidentes"},
+    {"clave": "interior", "tema": "Cuidado de unidad",
+     "sub": "Cuidado de la unidad interior", "peso": 0.05,
+     "n0": "0 inspecciones positivas", "n3": "1 a 2 inspecciones positivas",
+     "n5": "3 inspecciones positivas"},
+]
+# Cuanto vale cada puntaje del formato, como fraccion del peso del tema.
+FACTOR_PUNTOS = {0: 0.0, 3: 0.5, 5: 1.0}
+EVALUACIONES = 3                      # una por mes de periodo de prueba
 
 
 def _conn():
@@ -105,6 +148,20 @@ def init():
         id BIGINT PRIMARY KEY, empresa TEXT, nombre TEXT, telefono TEXT,
         activo INTEGER DEFAULT 1, fecha_alta TEXT, fecha_baja TEXT,
         motivo_baja TEXT)""")
+    # Fecha real de contratacion. NO es `fecha_alta`, que es cuando alguien capturo
+    # el renglon en este tablero: el periodo de prueba se cuenta desde que entro a
+    # trabajar, y para los que ya estaban en la lista hay que capturarla a mano.
+    try:
+        _run("ALTER TABLE recl_conductores ADD COLUMN IF NOT EXISTS fecha_contratacion TEXT")
+    except Exception:
+        try:
+            _run("ALTER TABLE recl_conductores ADD COLUMN fecha_contratacion TEXT")
+        except Exception:
+            pass
+    _run("""CREATE TABLE IF NOT EXISTS recl_evaluaciones(
+        id BIGINT PRIMARY KEY, conductor_id BIGINT, numero INTEGER,
+        fecha TEXT, jefe TEXT, base TEXT, puesto TEXT, puntos TEXT,
+        porcentaje REAL, positivos TEXT, areas TEXT, creado TEXT, autor TEXT)""")
     _run("""CREATE TABLE IF NOT EXISTS recl_config(
         clave TEXT PRIMARY KEY, valor TEXT)""")
     for e in EMPRESAS:
@@ -322,7 +379,7 @@ def candidato_del(cid):
 
 
 COLS_COND = ["id", "empresa", "nombre", "telefono", "activo",
-             "fecha_alta", "fecha_baja", "motivo_baja"]
+             "fecha_alta", "fecha_baja", "motivo_baja", "fecha_contratacion"]
 
 
 def conductores_list(empresa=None, solo_activos=None):
@@ -338,7 +395,184 @@ def conductores_list(empresa=None, solo_activos=None):
     where = (" WHERE " + " AND ".join(cond)) if cond else ""
     rows = _run(f"SELECT {', '.join(COLS_COND)} FROM recl_conductores{where} "
                 f"ORDER BY activo DESC, nombre", tuple(params), "all")
-    return _dicts(rows, COLS_COND)
+    conductores = _dicts(rows, COLS_COND)
+    # Las evaluaciones viajan con el conductor: la tabla pinta tres botones por
+    # renglon, y pedirlas una por una serian cientos de consultas para dibujar
+    # una sola pantalla.
+    hechas = {}
+    for fila in _run("SELECT conductor_id, numero, porcentaje, fecha "
+                     "FROM recl_evaluaciones", (), "all") or []:
+        hechas.setdefault(fila[0], {})[int(fila[1])] = {
+            "porcentaje": fila[2], "fecha": fila[3]}
+    for c in conductores:
+        c["evaluaciones"] = hechas.get(c["id"], {})
+        c["prueba"] = estado_prueba(c["fecha_contratacion"], c["evaluaciones"])
+    return conductores
+
+
+def _suma_meses(fecha, meses):
+    """La misma fecha N meses despues. Si el dia no existe, cae al ultimo del mes."""
+    anio = fecha.year + (fecha.month - 1 + meses) // 12
+    mes = (fecha.month - 1 + meses) % 12 + 1
+    dia = fecha.day
+    while dia > 28:
+        try:
+            return fecha.replace(year=anio, month=mes, day=dia)
+        except ValueError:
+            dia -= 1
+    return fecha.replace(year=anio, month=mes, day=dia)
+
+
+def color_calificacion(porcentaje):
+    """Semaforo del formato: 0-49 rojo, 50-69 amarillo, 70 o mas verde.
+
+    El verde es el que importa: es la luz que RH necesita para contratar en
+    definitiva al terminar el periodo de prueba.
+    """
+    if porcentaje is None:
+        return ""
+    if porcentaje < 50:
+        return "rojo"
+    if porcentaje < 70:
+        return "amarillo"
+    return "verde"
+
+
+def estado_prueba(fecha_contratacion, evaluaciones):
+    """En que va el periodo de prueba: una entrada por cada evaluacion.
+
+    Cada evaluacion vence al cumplir ese mes desde la contratacion. Mientras no
+    vence no se pide nada —pedir la de un mes que no ha pasado solo ensena a
+    ignorar el color—; vencida y sin hacer se marca en naranja; hecha, toma el
+    color de su calificacion.
+    """
+    salida = {"meses": None, "pendientes": 0, "evaluaciones": []}
+    inicio = None
+    if fecha_contratacion:
+        try:
+            inicio = datetime.strptime(str(fecha_contratacion)[:10], "%Y-%m-%d")
+        except ValueError:
+            inicio = None
+    ahora = datetime.now(timezone.utc)
+    hoy = datetime(ahora.year, ahora.month, ahora.day)
+    if inicio:
+        cumplidos = 0
+        while cumplidos < 60 and hoy >= _suma_meses(inicio, cumplidos + 1):
+            cumplidos += 1
+        salida["meses"] = cumplidos
+    for numero in range(1, EVALUACIONES + 1):
+        hecha = ((evaluaciones or {}).get(numero)
+                 or (evaluaciones or {}).get(str(numero)))
+        if hecha:
+            salida["evaluaciones"].append({
+                "numero": numero, "estado": "hecha",
+                "porcentaje": hecha.get("porcentaje"),
+                "color": color_calificacion(hecha.get("porcentaje")),
+                "fecha": (hecha.get("fecha") or "")[:10]})
+            continue
+        # Sin fecha de contratacion no se puede saber si ya vencio: se deja en
+        # blanco en vez de inventar una urgencia que nadie puede atender.
+        if inicio is None:
+            estado = "sin_fecha"
+        elif hoy >= _suma_meses(inicio, numero):
+            estado = "pendiente"
+            salida["pendientes"] += 1
+        else:
+            estado = "futura"
+        salida["evaluaciones"].append({"numero": numero, "estado": estado,
+                                       "porcentaje": None, "color": "",
+                                       "fecha": ""})
+    return salida
+
+
+def conductor_fecha_contratacion(cid, fecha):
+    """Captura o corrige la fecha de contratacion. Vacio la borra."""
+    _run(f"UPDATE recl_conductores SET fecha_contratacion = {PH} WHERE id = {PH}",
+         ((fecha or None), cid))
+
+
+COLS_EVAL = ["id", "conductor_id", "numero", "fecha", "jefe", "base", "puesto",
+             "puntos", "porcentaje", "positivos", "areas", "creado", "autor"]
+
+
+def evaluacion_get(conductor_id, numero):
+    fila = _run(f"SELECT {', '.join(COLS_EVAL)} FROM recl_evaluaciones "
+                f"WHERE conductor_id = {PH} AND numero = {PH}",
+                (conductor_id, int(numero)), "one")
+    if not fila:
+        return None
+    datos = _dicts([fila], COLS_EVAL)[0]
+    try:
+        datos["puntos"] = json.loads(datos["puntos"] or "{}")
+    except Exception:
+        datos["puntos"] = {}
+    return datos
+
+
+def limpiar_puntos(puntos):
+    """Deja solo los puntajes que el formato admite, por tema.
+
+    Vive en UN solo lugar porque lo usan el calculo y el guardado: con la regla
+    repetida, un 3 puntos en un tema que no lo tiene daba un porcentaje al
+    calcularlo y otro distinto al guardarlo.
+    """
+    limpios = {}
+    for criterio in CRITERIOS:
+        valor = (puntos or {}).get(criterio["clave"])
+        if valor in (None, ""):
+            continue
+        try:
+            valor = int(valor)
+        except (TypeError, ValueError):
+            continue
+        # Lo que no existe en papel tampoco puede entrar por el API: camara
+        # obstruida y aviso de colision no tienen punto medio, o hubo eventos o no.
+        if valor == 3 and not criterio["n3"]:
+            continue
+        if valor in FACTOR_PUNTOS:
+            limpios[criterio["clave"]] = valor
+    return limpios
+
+
+def calcular_porcentaje(puntos):
+    """Porcentaje de desempeno del formato: suma de (factor x peso), en por ciento.
+
+    Los temas sin calificar no suman. Es lo correcto —no se puede dar por bueno lo
+    que nadie reviso— y ademas se nota: una evaluacion a medias sale baja.
+    """
+    total = 0.0
+    for criterio in CRITERIOS:
+        valor = limpiar_puntos(puntos).get(criterio["clave"])
+        if valor is None:
+            continue
+        total += FACTOR_PUNTOS.get(valor, 0.0) * criterio["peso"]
+    return round(total * 100, 1)
+
+
+def evaluacion_guardar(conductor_id, numero, puntos, jefe="", base="", puesto="",
+                       positivos="", areas="", fecha=None, autor=""):
+    """Guarda (o reemplaza) la evaluacion N de ese conductor."""
+    numero = int(numero)
+    if numero not in range(1, EVALUACIONES + 1):
+        return None
+    limpios = limpiar_puntos(puntos)
+    porcentaje = calcular_porcentaje(limpios)
+    previa = evaluacion_get(conductor_id, numero)
+    if previa:
+        _run(f"UPDATE recl_evaluaciones SET fecha = {PH}, jefe = {PH}, base = {PH}, "
+             f"puesto = {PH}, puntos = {PH}, porcentaje = {PH}, positivos = {PH}, "
+             f"areas = {PH}, autor = {PH} WHERE id = {PH}",
+             (fecha or _ahora()[:10], jefe, base, puesto, json.dumps(limpios),
+              porcentaje, positivos, areas, autor, previa["id"]))
+    else:
+        _run(f"INSERT INTO recl_evaluaciones(id, conductor_id, numero, fecha, jefe, "
+             f"base, puesto, puntos, porcentaje, positivos, areas, creado, autor) "
+             f"VALUES ({PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, "
+             f"{PH}, {PH}, {PH})",
+             (_nuevo_id(), conductor_id, numero, fecha or _ahora()[:10], jefe,
+              base, puesto, json.dumps(limpios), porcentaje, positivos, areas,
+              _ahora(), autor))
+    return porcentaje
 
 
 def conductor_add(empresa, nombre, telefono=""):
